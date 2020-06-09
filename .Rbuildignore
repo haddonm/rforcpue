@@ -1,0 +1,6 @@
+^rforcpue\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^data-raw$
+^data-raw\.*$
+^README\.Rmd$
