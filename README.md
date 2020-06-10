@@ -16,6 +16,12 @@ GLMs (with different underlying distributions), and GAMs, along with
 examples of each. We will use a *News.md* file to track developments in
 this package as they occur.
 
+This package is currently under development and has no vignettes, as
+yet. There are many additional functions I intend to add that implement
+and illustrate GLMs with alternative residual distributions and GAMs,
+should they be wanted. It imports **rutilsMH**, so that package will
+also be needed should you wish to use this.
+
 ## Installation
 
 You can install this development version from

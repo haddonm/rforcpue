@@ -87,8 +87,8 @@ addnorm <- function(inhist,xdata,inc=0.01) {
 #'    plotted, defaults to inout's Optimum
 #' @param depend the dependent variable defaults to "LnCE"
 #' @param inlabel provides the means of giving a title to the 2 x 2 plot
-#' @param height default = 6; the height of the output plot
-#' @param width default = 8; the width of the output plot
+#' @param dorug default=TRUE, should the rug of points be included in 
+#'     the QQplot?
 #'
 #' @return a 2 x 2 plot of the residuals, the Q-Q plot, and the distributions
 #'    of the logged observed and predicted values of CPUE.
@@ -106,7 +106,7 @@ addnorm <- function(inhist,xdata,inc=0.01) {
 #' diagnosticPlot(out,3,sps,splabel)
 #' }
 diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
-                           depend="LnCE",inlabel="", height=6,width=8) {
+                           depend="LnCE",inlabel="",dorug=TRUE) {
   if ("outce" %in% class(inout)) {
     model <- inout$Models[[inmodel]]
   } else {
@@ -115,11 +115,10 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
   resids <- model$residuals
   fitted.vals <- model$fitted.values
   labs <- 1.1
-  dev.new(height=height,width=width,noRStudioGD = TRUE)
   par(mfrow= c(2,2))
   par(mai=c(0.5,0.5,0.3,0.05),oma=c(0,0,0,0))
   par(cex=0.85, mgp=c(1.5,0.35,0), font.axis=7)
-  plot(fitted.vals,resids, main="",
+  plot(fitted.vals,resids, main="",pch=1,
        ylab="", xlab="",panel.first=grid())
   title(main=list(inlabel, cex=labs, font=7),
         xlab=list("Predicted Values", cex=labs, font=7),
@@ -129,8 +128,8 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
          xlab=list("Theoretical Quantiles", cex=labs, font=7),
          main=list("Normal Q-Q Plot",cex=labs,font=7),panel.first=grid())
   qqline(resids, col=2,lwd=2)
-  rug(resids,ticksize=0.02,col="royal blue")
-  abline(v=c(-1.96,1.96),col="grey")
+  if (dorug) rug(resids,ticksize=0.02,col="royal blue")
+  abline(v=c(-1.96,1.96),col="green")
   par(mai=c(0.5,0.5,0.1,0.2))
   meance <- mean(indat[,depend],na.rm=TRUE)
   sdce <- sd(indat[,depend],na.rm=TRUE)
@@ -152,7 +151,6 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
         ylab=list("Frequency", cex=labs, font=7))
   text(minx+5*cebin,0.975*ymax,paste("Mean  ",round(meance,3),sep=""),cex=labs,font=7)
   text(minx+5*cebin,0.9*ymax,paste("StDev ",round(sdce,3),sep=""),cex=labs,font=7)
-
   meancef <- mean(fitted.vals,na.rm=TRUE)
   sdcef <- sd(fitted.vals,na.rm=TRUE)
   yf <- dnorm(x,mean=meancef,sd=sdcef)
@@ -166,7 +164,6 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
   text(lower+6*cebin,0.975*ymaxf,paste("Mean  ",round(meancef,3),sep=""),cex=labs,font=7)
   text(lower+6*cebin,0.9*ymaxf,paste("StDev ",round(sdcef,3),sep=""),cex=labs,font=7)
 }  # end of diagnosticPlot
-
 
 
 #' @title impactplot Plots relative contribution to CPUE trend of each Factor
@@ -628,59 +625,6 @@ plotstand <- function(stnd,bars=FALSE,geo=0.0,P=95,catch=NA,usefont=7) {
     title(ylab=list("Catch", cex=1.0, col=1, font=usefont))
   }
 } # End of plotstand
-
-
-#' @title plotprep sets up a window and the par values for a single plot
-#'
-#' @description plotprep sets up a window and the par values for a single
-#'     plot. It checks to see if a graphics device is open and opens a new
-#'     one if not. This is simply a utility function to save typing the
-#'     standard syntax. Some of the defaults can be changed. Typing the name
-#'     without () will provide a template for modification. If 'windows' is
-#'     called repeatedly this will generate a new active graphics device
-#'     each time leaving the older ones inactive but present. For quick
-#'     exploratory plots this behaviour is not wanted, hence the check if
-#'     an active device exists already or not.
-#'
-#' @param width defaults to 6 inches = 15.24cm - width of plot
-#' @param height defaults to 3 inches = 7.62cm - height of plot
-#' @param usefont default is 7 (bold Times) 1 sans serif, 2 sans serif bold
-#' @param cex default is 0.85, the font size font used for text in the plots
-#' @param newdev reuse a previously defined graphics device or make new one;
-#'     defaults to TRUE
-#' @param filename defaults to "" = do not save to a filename. If a
-#'     filename is input the last three characters will be checked and if
-#'     they are not png then .png will be added.
-#' @param resol resolution of the png file, if defined, default=300
-#'
-#' @return Checks for and sets up a graphics device and sets the default
-#'     plotting par values. This changes the current plotting options!
-#' @export
-#' @examples
-#' \dontrun{
-#'  x <- rnorm(1000,mean=0,sd=1.0)
-#'  plotprep()
-#'  hist(x,breaks=30,main="",col=2)
-#' }
-plotprep <- function(width=6,height=3.6,usefont=7,cex=0.85,
-                     newdev=TRUE,filename="",resol=300) {
-  if  ((names(dev.cur()) != "null device") &
-       (newdev)) suppressWarnings(dev.off())
-  lenfile <- nchar(filename)
-  if (lenfile > 3) {
-    end <- substr(filename,(lenfile-3),lenfile)
-    if (end != ".png") filename <- paste0(filename,".png")
-    png(filename=filename,width=width,height=height,units="in",res=resol)
-  } else {
-    if (names(dev.cur()) %in% c("null device","RStudioGD"))
-      dev.new(width=width,height=height,noRStudioGD = TRUE)
-  }
-  par(mfrow=c(1,1),mai=c(0.45,0.45,0.05,0.05),oma=c(0.0,0.0,0.0,0.0))
-  par(cex=cex, mgp=c(1.35,0.35,0), font.axis=usefont,font=usefont,
-      font.lab=usefont)
-  if (lenfile > 0)
-    cat("\n Remember to place 'graphics.off()' after the plot \n")
-} # end of plotprep
 
 #' @title plotyrexp generates a plot of count by yrs of experience diving
 #'

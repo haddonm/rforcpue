@@ -10,8 +10,7 @@ diagnosticPlot(
   inmodel = inout$Optimum,
   depend = "LnCE",
   inlabel = "",
-  height = 6,
-  width = 8
+  dorug = TRUE
 )
 }
 \arguments{
@@ -26,9 +25,8 @@ plotted, defaults to inout's Optimum}
 
 \item{inlabel}{provides the means of giving a title to the 2 x 2 plot}
 
-\item{height}{default = 6; the height of the output plot}
-
-\item{width}{default = 8; the width of the output plot}
+\item{dorug}{default=TRUE, should the rug of points be included in 
+the QQplot?}
 }
 \value{
 a 2 x 2 plot of the residuals, the Q-Q plot, and the distributions
