@@ -4,12 +4,12 @@
 \alias{geobb}
 \title{geobb plots the naive geometric mean by year and block}
 \usage{
-geobb(ind, smu = "block", legloc = "topright", LnCE = "LnCE", year = "year")
+geobb(ind, sau = "block", legloc = "topright", LnCE = "LnCE", year = "year")
 }
 \arguments{
 \item{ind}{the input data.frame or matrix}
 
-\item{smu}{the column name of the block variable default = "block"}
+\item{sau}{the column name of the block variable default = "block"}
 
 \item{legloc}{the location of the legend defaults to "topright",
 could be "topleft", "bottomleft", or "bottomright", usually

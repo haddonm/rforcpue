@@ -4,13 +4,16 @@
 \alias{getfact}
 \title{getfact extracts parameter estimates for a given factor from a outce object}
 \usage{
-getfact(inmat, invar)
+getfact(inmat, invar, biascorrect = TRUE)
 }
 \arguments{
 \item{inmat}{generally this will be an outce object but it can be
 a matrix of coefficients, an lm object, or a gam object}
 
 \item{invar}{the model variable whose parameters are wanted}
+
+\item{biascorrect}{when back transforming the coefficients should we use the
+log-normal bias-correction or not. default=TRUE}
 }
 \value{
 a matrix containing the parameters for invar

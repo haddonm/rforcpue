@@ -201,10 +201,12 @@ getaav <- function(invect,narm=TRUE) { # invect=cbby[,1]; narm=TRUE
 #' @param inmat generally this will be an outce object but it can be
 #'     a matrix of coefficients, an lm object, or a gam object
 #' @param invar the model variable whose parameters are wanted
+#' @param biascorrect when back transforming the coefficients should we use the
+#'     log-normal bias-correction or not. default=TRUE
 #'
 #' @return a matrix containing the parameters for invar
 #' @export
-getfact <- function(inmat,invar) {  # inmat=mat; invar="year"
+getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=mat; invar="year"
    allowable <- c("matrix","array","outce","lm","gam")
    whatclass <- class(inmat)
    if (length(whatclass) > 2) {
@@ -239,7 +241,11 @@ getfact <- function(inmat,invar) {  # inmat=mat; invar="year"
    se <- startmat[,"Std. Error"]
    tval <- startmat[,"t value"]
    Prob <- startmat[,"Pr(>|t|)"]
-   backtran <- exp(lnce + (se * se)/2)
+   if (biascorrect) {
+      backtran <- exp(lnce + (se * se)/2)
+   } else {
+      backtran <- exp(lnce)
+   }
    ans <- cbind(c(1.0,backtran),c(0,se),c(0,lnce),
                 scaleCE(c(1.0,backtran),avCE=1.0),
                 c(NA,tval),c(NA,Prob)

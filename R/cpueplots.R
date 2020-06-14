@@ -335,12 +335,12 @@ lefthist <- function(x,bins=25,mult=1.025,col=2,lwd=1,width=0.9,border=1,
 #'
 #' @param indat the data.frame containing the fisheries data
 #' @param title the main title for the plots
-#' @param smu the spatial management unit used, in Tasmania = block
-#' @param leg1 legend location for the catch vs hours by smu plot,
+#' @param sau the spatial management unit used, in Tasmania = block
+#' @param leg1 legend location for the catch vs hours by sau plot,
 #'     default="topleft"
-#' @param leg2 legend location for the geometric mean cpue by smu plot,
+#' @param leg2 legend location for the geometric mean cpue by sau plot,
 #'     default="bottomleft"
-#' @param leg3 legend location for the active diver by smu plot,
+#' @param leg3 legend location for the active diver by sau plot,
 #'     default="bottomleft"
 #'
 #' @return nothing but it generates a 3 row x 2 col plot
@@ -348,18 +348,18 @@ lefthist <- function(x,bins=25,mult=1.025,col=2,lwd=1,width=0.9,border=1,
 #'
 #' @examples
 #' \dontrun{
-#'   indat=abd; title="Fortescue";smu="block";leg1="topleft";
+#'   indat=abd; title="Fortescue";sau="block";leg1="topleft";
 #'   leg2="bottomleft";leg3="bottomleft"
 #'   print("Waiting on an internal data.frame")
-#' }    # indat=abd; title="blk13E"; smu="block";
-plotbasic <- function(indat,title,smu="block",leg1="topleft",leg2="bottomleft",
+#' }    # indat=abd; title="blk13E"; sau="block";
+plotbasic <- function(indat,title,sau="block",leg1="topleft",leg2="bottomleft",
                       leg3="bottomleft") {
   parset(plots=c(3,2),outmargin=c(0,0,1,0),margin=c(0.4,0.4,0.05,0.05))
-  cbyb <- cbb(indat,smu=smu)  # catch by block by year
-  hbyb <- hbb(indat,smu=smu)  # hour by block by year
+  cbyb <- cbb(indat,sau=sau)  # catch by block by year
+  hbyb <- hbb(indat,sau=sau)  # hour by block by year
   cvsh(cbyb,hbyb,legloc=leg1) # catch vs hours
   gbyb <- geobb(indat,legloc=leg2) # geometric mean by year
-  dbb <- divbb(indat,smu,legloc=leg3) #active divers by block
+  dbb <- divbb(indat,sau,legloc=leg3) #active divers by block
   divact <- as.matrix(table(indat$diver,indat$year))
   ybd <- apply(divact,1,countgtzero)
   yrs <- as.numeric(colnames(divact))

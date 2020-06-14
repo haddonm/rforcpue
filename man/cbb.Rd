@@ -2,19 +2,19 @@
 % Please edit documentation in R/candidate_functions.r
 \name{cbb}
 \alias{cbb}
-\title{cbb catch by block or smu plot}
+\title{cbb catch by block or sau plot}
 \usage{
-cbb(ind, smu = "block", legloc = "topright", catch = "catch", year = "year")
+cbb(ind, sau = "block", legloc = "topright", catch = "catch", year = "year")
 }
 \arguments{
 \item{ind}{the input data.frame or matrix}
 
-\item{smu}{the column name of the smu variable default = "block"}
+\item{sau}{the column name of the sau variable default = "block"}
 
 \item{legloc}{the location of the legend defaults to "topright",
 could be "topleft", "bottomleft", or "bottomright"}
 
-\item{catch}{the column name of the catc variable default = "catch"}
+\item{catch}{the column name of the catch variable default = "catch"}
 
 \item{year}{the column name of the year variable default = "year"}
 }
@@ -22,12 +22,12 @@ could be "topleft", "bottomleft", or "bottomright"}
 invisibly the catch by year by block as a matrix
 }
 \description{
-cbb plots out the catch by block or by smu, A legend is
+cbb plots out the catch by block or by sau, A legend is
     produced if there is a matrix of values and is made up of
     the column names of the input catchb matrix.
 }
 \examples{
 \dontrun{
- ind=abd2;legloc="topright";smu="block";catch="catch";year="year"
+ ind=abd2;legloc="topright";sau="block";catch="catch";year="year"
 }
 }

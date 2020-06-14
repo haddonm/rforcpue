@@ -26,9 +26,9 @@ cvsh plots the catch versus hours, one can obtain the
 }
 \examples{
 \dontrun{
-   ind=abd2;legloc="topright";smu="block";hours="hours";year="year"
-   cbyb <- cbb(ind,smu)
-   hbyb <- hbb(ind,smu)
+   ind=abd2;legloc="topright";sau="block";hours="hours";year="year"
+   cbyb <- cbb(ind,sau)
+   hbyb <- hbb(ind,sau)
    cvsh(cbyb,hbyb)
 }
 }

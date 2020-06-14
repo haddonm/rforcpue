@@ -4,12 +4,12 @@
 \alias{hbb}
 \title{hbb plots the hours by year by block}
 \usage{
-hbb(ind, smu = "block", legloc = "topright", hours = "hours", year = "year")
+hbb(ind, sau = "block", legloc = "topright", hours = "hours", year = "year")
 }
 \arguments{
 \item{ind}{the input data.frame or matrix}
 
-\item{smu}{the column name of the block variable default = "block"}
+\item{sau}{the column name of the block variable default = "block"}
 
 \item{legloc}{the location of the legend defaults to "topright",
 could be "topleft", "bottomleft", or "bottomright"}

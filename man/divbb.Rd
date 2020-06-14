@@ -4,12 +4,12 @@
 \alias{divbb}
 \title{divbb plots a count of active diver by block by year}
 \usage{
-divbb(ind, smu = "block", legloc = "topright", diver = "diver", year = "year")
+divbb(ind, sau = "block", legloc = "topright", diver = "diver", year = "year")
 }
 \arguments{
 \item{ind}{input data.frame or matrix}
 
-\item{smu}{the column name of the block variable default = "block"}
+\item{sau}{the column name of the block variable default = "block"}
 
 \item{legloc}{location of the legend defaults to "topright",
 could be "topleft", "bottomleft", or "bottomright", usually

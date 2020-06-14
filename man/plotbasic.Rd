@@ -7,7 +7,7 @@
 plotbasic(
   indat,
   title,
-  smu = "block",
+  sau = "block",
   leg1 = "topleft",
   leg2 = "bottomleft",
   leg3 = "bottomleft"
@@ -18,15 +18,15 @@ plotbasic(
 
 \item{title}{the main title for the plots}
 
-\item{smu}{the spatial management unit used, in Tasmania = block}
+\item{sau}{the spatial management unit used, in Tasmania = block}
 
-\item{leg1}{legend location for the catch vs hours by smu plot,
+\item{leg1}{legend location for the catch vs hours by sau plot,
 default="topleft"}
 
-\item{leg2}{legend location for the geometric mean cpue by smu plot,
+\item{leg2}{legend location for the geometric mean cpue by sau plot,
 default="bottomleft"}
 
-\item{leg3}{legend location for the active diver by smu plot,
+\item{leg3}{legend location for the active diver by sau plot,
 default="bottomleft"}
 }
 \value{
@@ -37,8 +37,8 @@ plotbasic expects to receive plots six graphs,
 }
 \examples{
 \dontrun{
-  indat=abd; title="Fortescue";smu="block";leg1="topleft";
+  indat=abd; title="Fortescue";sau="block";leg1="topleft";
   leg2="bottomleft";leg3="bottomleft"
   print("Waiting on an internal data.frame")
-}    # indat=abd; title="blk13E"; smu="block";
+}    # indat=abd; title="blk13E"; sau="block";
 }

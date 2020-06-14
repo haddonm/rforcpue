@@ -1,52 +1,56 @@
 
-#' @title addyrexp adds the years of experience by record to data.frame
+#' @title addcntcat adds the years of experience by record to data.frame
 #'
-#' @description addyrexp adds the years of experience of each diver, as
-#'     recorded in the docket catch-effort data.frame, to
-#'     the right-hand side of the input data.frame. The years of
-#'     experience for each diver will obviously change depending on
-#'     which block, or collection of blocks, are selected, though it
-#'     would be possible to apply this function to the whole data.frame
-#'     of information. The value of this is that it facilates the
-#'     exploration of the influence of years of experience on everything
-#'     else.
+#' @description addcntcat adds the count of years of experience, and the total
+#'     catch across years, for each diver, as recorded in the input catch-effort 
+#'     data.frame. Additions are made to the right-hand side of the input 
+#'     data.frame. The count of years and total catch for each diver will 
+#'     obviously change depending on which block, or collection of blocks, are 
+#'     selected. The value of this is that it facilitates the exploration of the 
+#'     influence of years of experience and total catch on everything else.
 #'
 #' @param indat the docket catch-effort data.frame of interest
+#' @param diver character string name of the active diver/vessel or whoever/
+#'     whatever is fishing each year, default='diver'
+#' @param year character string name of the year, default='year'
+#' @param catch character string name of the catch variable in the data.frame
 #'
-#' @return the same input data.frame with the addition of one column
+#' @return the same input data.frame with the addition of two columns
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #'   print("waiting on an integral data-set")
 #' }
-addyrexp <- function(indat) {
-  indat$yrexp <- NA
-  divact <- as.matrix(table(indat$diver,indat$year))
-  ybd <- apply(divact,1,countgtzero)
-  dyr <- as.matrix(table(ybd))
-  expyr <- as.numeric(rownames(dyr))
-  nstep <- length(expyr)
-  for (i in 1:nstep) {
-    pick <- which(ybd == expyr[i])
-    divs <- as.numeric(names(pick))
-    pickdiv <- which(indat$diver %in% divs)
-    indat$yrexp[pickdiv] <- expyr[i]
+addcntcat <- function(indat,diver="diver",year="year",catch="catch",
+                      count="count",totC="totC") {
+  #indat=ab1;diver="diver";year="year";catch="catch";count="count";totC="totC"
+  indat[,count] <- NA
+  indat[,totC] <- NA
+  cbd <- tapply(indat[,catch],list(indat[,diver],indat[,year]),sum,na.rm=TRUE)/1000
+  cnt <- apply(cbd,1,countgtzero)
+  ctot <- rowSums(cbd,na.rm=TRUE) 
+  ndiver <- length(cnt)
+  divers <- as.numeric(names(cnt))
+  for (i in 1:ndiver) {
+    pick <- which(indat[,diver] == divers[i])
+    indat$count[pick] <- cnt[i]
+    indat$totC[pick] <- ctot[pick]
   }
   return(indat)
-} #end of addyrexp
+} #end of addcntcat
 
-#' @title cbb catch by block or smu plot
+#' @title cbb catch by block or sau plot
 #'
-#' @description cbb plots out the catch by block or by smu, A legend is
+#' @description cbb plots out the catch by block or by sau, A legend is
 #'     produced if there is a matrix of values and is made up of
 #'     the column names of the input catchb matrix.
 #'
 #' @param ind  the input data.frame or matrix
-#' @param smu the column name of the smu variable default = "block"
+#' @param sau the column name of the sau variable default = "block"
 #' @param legloc the location of the legend defaults to "topright",
 #'     could be "topleft", "bottomleft", or "bottomright"
-#' @param catch the column name of the catc variable default = "catch"
+#' @param catch the column name of the catch variable default = "catch"
 #' @param year the column name of the year variable default = "year"
 #'
 #' @return invisibly the catch by year by block as a matrix
@@ -54,13 +58,48 @@ addyrexp <- function(indat) {
 #'
 #' @examples
 #' \dontrun{
-#'  ind=abd2;legloc="topright";smu="block";catch="catch";year="year"
+#'  ind=abd2;legloc="topright";sau="block";catch="catch";year="year"
 #' }
-cbb <- function(ind,smu="block",legloc="topright",catch="catch",year="year") {
-  cbyb <- as.matrix(tapply(ind[,catch],list(ind[,year],ind[,smu]),sum,na.rm=TRUE)/1000)
+cbb <- function(ind,sau="block",legloc="topright",catch="catch",year="year") {
+  cbyb <- as.matrix(tapply(ind[,catch],list(ind[,year],ind[,sau]),sum,na.rm=TRUE)/1000)
   plotmat(cbyb,xlab="years",ylab="Catch (t)",legloc=legloc)
   return(invisible(cbyb))
 } #end of cbb - catch by block
+
+#' @title cleanname tidies a vector of names by removing commas and spaces
+#' 
+#' @description cleanname tides character strings in an input vector by 
+#'     removing commas, apostrophes, and spaces. 
+#'
+#' @param invect the vector of character strings to be tidied.
+#' @param removeNA a boolean determining whether NA values are replaced with 
+#'     'unknown'
+#'
+#' @return a vector the same length as was input
+#' @export
+#'
+#' @examples
+#' x <- c("John Smith", "Port of Hobart","An example, and another")
+#' cleanname(x)
+cleanname <- function(invect,removeNA=TRUE) { # invect=ab$ports
+  outvect <- invect
+  types <- unique(invect)
+  if (any(invect == "NA")) {
+    pick <- which(invect == "NA")
+    outvect[pick] <- "unknown"
+    pick <- which(types == "NA")
+    types <- types[-pick]
+  }  
+  outtype <- gsub(",","",types)
+  outtype <- gsub("'","_",outtype)
+  outtype <- gsub(" ","_",outtype)
+  ntype <- length(types)
+  for (i in 1:ntype) {
+    pick <- which(outvect == types[i])
+    outvect[pick] <- outtype[i]
+  }
+  return(outvect)
+} # end of cleanname
 
 #' @title cvsh plots the catch versus hours
 #'
@@ -80,9 +119,9 @@ cbb <- function(ind,smu="block",legloc="topright",catch="catch",year="year") {
 #'
 #' @examples
 #' \dontrun{
-#'    ind=abd2;legloc="topright";smu="block";hours="hours";year="year"
-#'    cbyb <- cbb(ind,smu)
-#'    hbyb <- hbb(ind,smu)
+#'    ind=abd2;legloc="topright";sau="block";hours="hours";year="year"
+#'    cbyb <- cbb(ind,sau)
+#'    hbyb <- hbb(ind,sau)
 #'    cvsh(cbyb,hbyb)
 #' }
 cvsh <- function(catchb,hoursb,legloc="topleft") {
@@ -99,14 +138,12 @@ cvsh <- function(catchb,hoursb,legloc="topleft") {
   }
 } # end of cvsh catch vs hours
 
-
-
 #' @title divbb plots a count of active diver by block by year
 #'
 #' @description divbb plots a count of divers active by block by year
 #'
 #' @param ind input data.frame or matrix
-#' @param smu the column name of the block variable default = "block"
+#' @param sau the column name of the block variable default = "block"
 #' @param legloc location of the legend defaults to "topright",
 #'     could be "topleft", "bottomleft", or "bottomright", usually
 #'     determined interactively for each instance
@@ -120,15 +157,73 @@ cvsh <- function(catchb,hoursb,legloc="topleft") {
 #' \dontrun{
 #'   ind=abd2;legloc="topright";block="block";diver="diver";year="year"
 #' }
-divbb <- function(ind,smu="block",legloc="topright",diver="diver",year="year") {
-  dbyb <- table(ind[,diver],ind[,year],ind[,smu])
+divbb <- function(ind,sau="block",legloc="topright",diver="diver",year="year") {
+  dbyb <- table(ind[,diver],ind[,year],ind[,sau])
   nblk <- dim(dbyb)[3]
   dbb <- matrix(0,nrow=(dim(dbyb)[2]),ncol=(dim(dbyb)[3]),
                 dimnames=list(dimnames(dbyb)[[2]],dimnames(dbyb)[[3]]))
   for (i in 1:nblk) dbb[,i] <- apply(dbyb[,,i],2,countgtzero)
   plotmat(dbb,xlab="years",ylab="Active Divers",legloc=legloc)
   return(invisible(dbb))
-}
+} # end of divdd
+
+#' @title factorprop summarizes the properties of a potential factor
+#' 
+#' @description factorprop summarizes the properties of a potential factor to be
+#'     used in a statistical standardization of cpue data. It does this in terms 
+#'     of the number of records and catches by year, and how many years the 
+#'     factor involved reported catches. Thus if dealing with divers and vessels
+#'     it provides catch by diver or vessel by year, plus number of records
+#'     reported, and summarizes
+#'
+#' @param indat the data.frame being used for the standardization
+#' @param fact the name of the factor being explored, a character string
+#' @param resdir the results directory into which all results for the runname are
+#'     put
+#' @param runname the name of the particular analysis
+#' @param resfile the result logfile, generated by setuphtml
+#' @param year the name of the year factor in the data.frame. default='year'
+#' @param catch the name of the catch factor in the data.frame. default='catch'
+#' @param effort the name of the effort factor in the data.frame. default='hours'
+#' @param cpue the name of the cpue factor in the data.frame. default='cpue'
+#'
+#' @return invisibly a list of records by year, catch by year and a table with
+#'     total records, actively reporting years, and total catch for each value 
+#'     of the factor
+#' @export
+#'
+#' @examples
+#' print("need to wait on an internal data.frame")
+factorprop <- function(indat,fact,resdir,runname,resfile,
+                       year="year",catch="catch",effort="hours",cpue="cpue") {
+  #  indat=ab2; fact="ports";year="year";catch="catch";effort="hours";cpue="cpue"
+  records <- table(indat[,fact])
+  rby <- table(indat[,fact],indat[,year])
+  fcby <- tapply(indat[,catch],list(indat[,fact],indat[,year]),sum,na.rm=TRUE)/1000
+  county <- apply(fcby,1,countgtzero)
+  totC <- rowSums(fcby,na.rm=TRUE)
+  byfact <- cbind(records,years=county,totalC=totC)
+  
+  filename <- filenametopath(resdir,paste0(fact,"_activeyr_",runname,".png"))
+  plotprep(width=7,height=4,filename=filename,verbose=FALSE)
+  inthist(county,width=0.9,col=2,border=3,ylabel="Frequency",
+          xlabel=paste0("Years ",fact," Reported Catches"),
+          panel.first=grid())
+  addplot(filen=filename,resfile=resfile,category=fact,
+          caption=paste0("Years ",fact," Reported Catches"))    
+  
+  filename <- filenametopath(resdir,paste0(fact,"_rby_",runname,".csv"))
+  addtable(rby,filen=filename,resfile=resfile,category=fact,
+           caption=paste0("Records by year by ",fact,"."),big=TRUE)
+  filename <- filenametopath(resdir,paste0(fact,"_cby_",runname,".csv"))
+  addtable(fcby,filen=filename,resfile=resfile,category=fact,
+           caption=paste0("Catch by year by ",fact,"."),big=TRUE)
+  filename <- filenametopath(resdir,paste0(fact,"_",runname,".csv"))
+  addtable(byfact,filen=filename,resfile=resfile,category=fact,
+           caption=paste0("Total records active years and catch by ",fact,"."),
+           big=TRUE)
+  return(invisible(list(rby=rby,cby=fcby,byfact=byfact)))
+} # end of factorprop
 
 
 #' @title filelist literally lists the files in a directory
@@ -194,7 +289,7 @@ filelist <- function(indir,findtext="",ignorecase=FALSE,silent=FALSE) {
 #'     the input data.frame or matrix.
 #'
 #' @param ind the input data.frame or matrix
-#' @param smu the column name of the block variable default = "block"
+#' @param sau the column name of the block variable default = "block"
 #' @param legloc the location of the legend defaults to "topright",
 #'     could be "topleft", "bottomleft", or "bottomright", usually
 #'     determined interactively for each instance
@@ -208,8 +303,8 @@ filelist <- function(indir,findtext="",ignorecase=FALSE,silent=FALSE) {
 #' \dontrun{
 #'    print("wait")
 #' }
-geobb <- function(ind,smu="block",legloc="topright",LnCE="LnCE",year="year") {
-  gbb <- as.matrix(exp(tapply(ind[,LnCE],list(ind[,year],ind[,smu]),mean,na.rm=TRUE)))
+geobb <- function(ind,sau="block",legloc="topright",LnCE="LnCE",year="year") {
+  gbb <- as.matrix(exp(tapply(ind[,LnCE],list(ind[,year],ind[,sau]),mean,na.rm=TRUE)))
   plotmat(gbb,xlab="years",ylab="Geometric Mean CE",legloc=legloc)
   return(invisible(gbb))
 }
@@ -219,7 +314,7 @@ geobb <- function(ind,smu="block",legloc="topright",LnCE="LnCE",year="year") {
 #' @description  hbb plots the hours by year by block
 #'
 #' @param ind  the input data.frame or matrix
-#' @param smu the column name of the block variable default = "block"
+#' @param sau the column name of the block variable default = "block"
 #' @param legloc  the location of the legend defaults to "topright",
 #'     could be "topleft", "bottomleft", or "bottomright"
 #' @param hours the column name of the effort variable default = "hours"
@@ -233,41 +328,11 @@ geobb <- function(ind,smu="block",legloc="topright",LnCE="LnCE",year="year") {
 #'  ind=abd2;legloc="topright";block="block";hours="hours";year="year"
 #'
 #' }
-hbb <- function(ind,smu="block",legloc="topright",hours="hours",year="year") {
-  hbyb <- as.matrix(tapply(ind[,hours],list(ind[,year],ind[,smu]),sum,na.rm=TRUE)/1000)
+hbb <- function(ind,sau="block",legloc="topright",hours="hours",year="year") {
+  hbyb <- as.matrix(tapply(ind[,hours],list(ind[,year],ind[,sau]),sum,na.rm=TRUE)/1000)
   plotmat(hbyb,xlab="years",ylab="'000s Hours",legloc=legloc)
   return(invisible(hbyb))
 } #end of hbb - hours by block
-
-
-#' @title oneyrdivers removes divers who only fished for one year
-#'
-#' @description oneyrdivers takes in a data.frame of abalone fishery
-#'     data and removes records relating to divers who only fished for
-#'     a total of one year. Some only have a few records but there are
-#'     instances of some divers having hundreds of records. In most
-#'     standardizations single year divers have no influence, although
-#'     one would expect an influence if one treated divers as a random
-#'     effect.
-#'
-#' @param indat the data.frame of abalone fishery data
-#'
-#' @return a data.frame with single year divers removed
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#'  print("still being developed")
-#' }
-oneyrdivers <- function(indat) {
-  divact <- as.matrix(table(indat$diver,indat$year))
-  ybd <- apply(divact,1,countgtzero)
-  remove <- which(ybd == 1)
-  dropdiv <- as.numeric(names(remove))
-  pickdrop <- which(indat$diver %in% dropdiv)
-  outdat <- droplevels(indat[-pickdrop,])
-  return(outdat)
-} # end of oneyrdivers
 
 
 #' @title tidynames can replace awkward data.frame names with better ones
@@ -305,3 +370,57 @@ tidynames <- function(columns,replace,repwith) {
   }
   return(columns)
 } # end of tidynames
+
+#' @title yearprop summarizes the properties of the year as a factor
+#' 
+#' @description yearprop summarizes the properties of the year as a factor,
+#'     which is useful before conducting a cpue standardization.
+#'
+#' @param indat the data.frame being analysed
+#' @param resdir the results directory into which all results for the runname are
+#'     put
+#' @param runname the name of the particular analysis
+#' @param resfile the result logfile, generated by setuphtml
+#' @param year the name of the year factor in the data.frame. default='year'
+#' @param catch the name of the catch factor in the data.frame. default='catch'
+#' @param effort the name of the effort factor in the data.frame. default='hours'
+#' @param cpue the name of the cpue factor in the data.frame. default='cpue'
+#'
+#' @return invisibly returns a matrix of year, records, catch, hours, and 
+#'    bias-corrected geometric mean cpue. Also adds a table to the resdir and 
+#'    resfile
+#' @export
+#'
+#' @examples
+#' print("need to wait on an internal data.frame")
+yearprop <- function(indat,resdir,runname,resfile,
+                     year="year",catch="catch",effort="hours",cpue="cpue") {
+  rbf <- table(indat[,year])
+  factnames <- as.numeric(names(rbf))
+  cbf <- tapply(indat[,catch],indat[,year],sum,na.rm=TRUE)/1000
+  ebf <- tapply(indat[,effort],indat[,year],sum,na.rm=TRUE)
+  geom <- tapply(indat[,cpue],indat[,year],geomean)
+  yearprops <- cbind(factnames,rbf,cbf,ebf,geom)
+  colnames(yearprops) <- c("year","records","catch","hours","geom")
+  filename <- filenametopath(resdir,paste0("yearprops_",runname,".png"))
+  plotprep(width=7,height=5,filename=filename,verbose=FALSE)
+  parset(plots=c(2,2),margin=c(0.3,0.45,0.05,0.1))
+  ymax <- getmax(yearprops[,"records"])
+  plot(yearprops[,"year"],yearprops[,"records"],type="l",lwd=2,xlab="",yaxs="i",
+       ylab="Total Number of Records",panel.first=grid(),ylim=c(0,ymax))
+  ymax <- getmax(yearprops[,"catch"])
+  plot(yearprops[,"year"],yearprops[,"catch"],type="l",lwd=2,xlab="",yaxs="i",
+       ylab="Catch (t)",panel.first=grid(),ylim=c(0,ymax))
+  ymax <- getmax(yearprops[,"hours"])
+  plot(yearprops[,"year"],yearprops[,"hours"],type="l",lwd=2,xlab="",yaxs="i",
+       ylab="Effort as Total Hours",panel.first=grid(),ylim=c(0,ymax))
+  ymax <- getmax(yearprops[,"geom"])
+  plot(yearprops[,"year"],yearprops[,"geom"],type="l",lwd=2,xlab="",yaxs="i",
+       ylab="Geometric Mean CPUE",panel.first=grid(),ylim=c(0,ymax))
+  addplot(filen=filename,resfile=resfile,category="year",
+          caption=paste0("Summary of properties by Year"))    
+  filename <- filenametopath(resdir,paste0("yearprops_",runname,".csv"))
+  addtable(yearprops,filen=filename,resfile=resfile,category="year",
+           caption=paste0("Properties of the year factor."))
+  return(invisible(yearprops))
+} # end of yearprop
