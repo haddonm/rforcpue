@@ -22,6 +22,12 @@ whatever is fishing each year, default='diver'}
 \item{year}{character string name of the year, default='year'}
 
 \item{catch}{character string name of the catch variable in the data.frame}
+
+\item{count}{character string name for the count variable to be added to the 
+data.frame, default='count'}
+
+\item{totC}{character string name for the totalC variable to be added to the 
+data.frame, default='totC'}
 }
 \value{
 the same input data.frame with the addition of two columns

@@ -4,8 +4,8 @@ Description: General functions to assist with CPUE standardization.
     They include functions to conduct simple linear models, GLMs,
     and GAMs, with examples to assist people in their use.
 Depends: R (>= 3.5.0)
-Version: 0.0.0.1950
-Date: 2020-06-14
+Version: 0.0.0.1900
+Date: 2020-06-15
 Authors@R: 
     person(given = "Malcolm",
            family = "Haddon",
@@ -13,7 +13,8 @@ Authors@R:
            email = "malcolm.haddon@gmail.com")
 Maintainer: Malcolm Haddon <malcolm.haddon@gmail.com>           
 License: MIT + file LICENSE
-Imports: rutilsMH
+Imports: rutilsMH,
+         makehtml
 Encoding: UTF-8
 LazyData: true
 Byte-Compile: yes

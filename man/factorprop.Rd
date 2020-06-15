@@ -47,7 +47,10 @@ factorprop summarizes the properties of a potential factor to be
     of the number of records and catches by year, and how many years the 
     factor involved reported catches. Thus if dealing with divers and vessels
     it provides catch by diver or vessel by year, plus number of records
-    reported, and summarizes
+    reported, and summarizes all of these inside a local website. The value
+    of this is that outliers and uneven distributions of records can be easily
+    identified and decisions made about data selection and perhaps amalgamation
+    of levels within a factor.
 }
 \examples{
 print("need to wait on an internal data.frame")

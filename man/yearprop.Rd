@@ -40,7 +40,8 @@ invisibly returns a matrix of year, records, catch, hours, and
 }
 \description{
 yearprop summarizes the properties of the year as a factor,
-    which is useful before conducting a cpue standardization.
+    which is useful before conducting a cpue standardization. It also outputs
+    a table of the properties of the input data.frame
 }
 \examples{
 print("need to wait on an internal data.frame")

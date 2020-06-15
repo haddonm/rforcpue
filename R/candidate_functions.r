@@ -14,7 +14,11 @@
 #'     whatever is fishing each year, default='diver'
 #' @param year character string name of the year, default='year'
 #' @param catch character string name of the catch variable in the data.frame
-#'
+#' @param count character string name for the count variable to be added to the 
+#'     data.frame, default='count'
+#' @param totC character string name for the totalC variable to be added to the 
+#'     data.frame, default='totC'
+#'     
 #' @return the same input data.frame with the addition of two columns
 #' @export
 #'
@@ -174,7 +178,10 @@ divbb <- function(ind,sau="block",legloc="topright",diver="diver",year="year") {
 #'     of the number of records and catches by year, and how many years the 
 #'     factor involved reported catches. Thus if dealing with divers and vessels
 #'     it provides catch by diver or vessel by year, plus number of records
-#'     reported, and summarizes
+#'     reported, and summarizes all of these inside a local website. The value
+#'     of this is that outliers and uneven distributions of records can be easily
+#'     identified and decisions made about data selection and perhaps amalgamation
+#'     of levels within a factor. 
 #'
 #' @param indat the data.frame being used for the standardization
 #' @param fact the name of the factor being explored, a character string
@@ -196,21 +203,35 @@ divbb <- function(ind,sau="block",legloc="topright",diver="diver",year="year") {
 #' print("need to wait on an internal data.frame")
 factorprop <- function(indat,fact,resdir,runname,resfile,
                        year="year",catch="catch",effort="hours",cpue="cpue") {
-  #  indat=ab2; fact="ports";year="year";catch="catch";effort="hours";cpue="cpue"
+  #  indat=ab2; fact="diver";year="year";catch="catch";effort="hours";cpue="cpue"
   records <- table(indat[,fact])
   rby <- table(indat[,fact],indat[,year])
   fcby <- tapply(indat[,catch],list(indat[,fact],indat[,year]),sum,na.rm=TRUE)/1000
   county <- apply(fcby,1,countgtzero)
   totC <- rowSums(fcby,na.rm=TRUE)
   byfact <- cbind(records,years=county,totalC=totC)
-  
+
   filename <- filenametopath(resdir,paste0(fact,"_activeyr_",runname,".png"))
   plotprep(width=7,height=4,filename=filename,verbose=FALSE)
   inthist(county,width=0.9,col=2,border=3,ylabel="Frequency",
           xlabel=paste0("Years ",fact," Reported Catches"),
           panel.first=grid())
   addplot(filen=filename,resfile=resfile,category=fact,
-          caption=paste0("Years ",fact," Reported Catches"))    
+          caption=paste0("Years ",fact," Reported Catches"))  
+  
+  cumtotC <- cumsum(sort(totC,decreasing = TRUE))
+  nfact <- length(cumtotC)
+  maxC <- tail(cumtotC,1)
+  filename <- filenametopath(resdir,paste0(fact,"_cumulC_",runname,".png"))
+  ymax <- getmax(cumtotC)
+  plotprep(width=7,height=4,filename=filename,verbose=FALSE)
+  plot(1:nfact,cumtotC,type="l",lwd=2,ylab="cumulative Total Catch",
+          xlab=paste0("Sorted sequence of ",fact),ylim=c(0,ymax),yaxs="i",
+          panel.first=grid())
+  abline(v=which.closest((maxC*0.95),cumtotC),lwd=1,col=2)
+  abline(v=which.closest(maxC/2,cumtotC),lwd=1,col=2)  
+  addplot(filen=filename,resfile=resfile,category=fact,
+          caption=paste0(fact," Cumulative Catches with ~50% and ~95% catches"))  
   
   filename <- filenametopath(resdir,paste0(fact,"_rby_",runname,".csv"))
   addtable(rby,filen=filename,resfile=resfile,category=fact,
@@ -374,7 +395,8 @@ tidynames <- function(columns,replace,repwith) {
 #' @title yearprop summarizes the properties of the year as a factor
 #' 
 #' @description yearprop summarizes the properties of the year as a factor,
-#'     which is useful before conducting a cpue standardization.
+#'     which is useful before conducting a cpue standardization. It also outputs
+#'     a table of the properties of the input data.frame
 #'
 #' @param indat the data.frame being analysed
 #' @param resdir the results directory into which all results for the runname are
@@ -402,6 +424,7 @@ yearprop <- function(indat,resdir,runname,resfile,
   geom <- tapply(indat[,cpue],indat[,year],geomean)
   yearprops <- cbind(factnames,rbf,cbf,ebf,geom)
   colnames(yearprops) <- c("year","records","catch","hours","geom")
+  # plot summary statistics
   filename <- filenametopath(resdir,paste0("yearprops_",runname,".png"))
   plotprep(width=7,height=5,filename=filename,verbose=FALSE)
   parset(plots=c(2,2),margin=c(0.3,0.45,0.05,0.1))
@@ -418,7 +441,13 @@ yearprop <- function(indat,resdir,runname,resfile,
   plot(yearprops[,"year"],yearprops[,"geom"],type="l",lwd=2,xlab="",yaxs="i",
        ylab="Geometric Mean CPUE",panel.first=grid(),ylim=c(0,ymax))
   addplot(filen=filename,resfile=resfile,category="year",
-          caption=paste0("Summary of properties by Year"))    
+          caption=paste0("Summary of properties by Year"))   
+  # add a table of the summary values
+  filename <- filenametopath(resdir,paste0("dataprops_",runname,".csv"))
+  addtable(properties(indat),filen=filename,resfile=resfile,category="year",
+           caption=paste0("Properties of the input data.frame."))
+  
+  
   filename <- filenametopath(resdir,paste0("yearprops_",runname,".csv"))
   addtable(yearprops,filen=filename,resfile=resfile,category="year",
            caption=paste0("Properties of the year factor."))

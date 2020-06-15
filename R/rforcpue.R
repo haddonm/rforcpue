@@ -62,6 +62,7 @@ NULL
 
 #' @import graphics
 #' @import rutilsMH
+#' @import makehtml
 #' @importFrom grDevices png rgb dev.cur dev.new dev.off
 #' @importFrom stats anova as.formula dnorm lm median qnorm qqline qqnorm
 #' @importFrom stats quantile sd loess ccf
