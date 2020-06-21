@@ -4,8 +4,8 @@ Description: General functions to assist with CPUE standardization.
     They include functions to conduct simple linear models, GLMs,
     and GAMs, with examples to assist people in their use.
 Depends: R (>= 3.5.0)
-Version: 0.0.0.1900
-Date: 2020-06-15
+Version: 0.0.0.1850
+Date: 2020-06-21
 Authors@R: 
     person(given = "Malcolm",
            family = "Haddon",

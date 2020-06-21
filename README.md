@@ -7,8 +7,10 @@
 
 <!-- badges: end -->
 
-rforcpue is designed to assist with the standardization of fisheries
-cpue data. As a package it is tied to no particular fishery or species
+**rforcpue** is designed to assist with the standardization of fisheries
+cpue data and the intent is that it will replace the **cede** and
+**r4cpue** packages, which are now deprecated and will become obsolete.
+As a package, **rforcpue** is tied to no particular fishery or species
 and attempts are made to make the functions customizable to suit any
 given species or fishery. Functions will be developed that will enable
 the use of simple linear models (with log-transformed cpue data), use of
