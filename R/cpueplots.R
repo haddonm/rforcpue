@@ -559,13 +559,12 @@ plotlag <- function(x, driver="catch",react="cpue",lag=0,interval="year",
 
 #' @title plotmat plots a matrix of data
 #'
-#' @description plotmat is a utility function within abcpue that is
-#'     used to plot up the matrices calcualted by cbb, hbb, geobb,
-#'     and others. It expects a matrix of values and the variable
-#'     against which it is to be plotted as the rownames of the matrix.
-#'     Not exported but is used by abcpue. A legend is only
-#'     produced if there is a matrix of values and is made up of
-#'     the column names of the input catchb matrix.
+#' @description plotmat is a utility function that is used to plot up matrices 
+#'     calculated by cbb, hbb, geobb, and others. It expects a matrix of values 
+#'     and the variable against which it is to be plotted as the rownames of the 
+#'     matrix. Not exported but is used by rforcpue. A legend is only produced 
+#'     if there is a matrix of values and is made up of the column names of the 
+#'     input catchb matrix.
 #'
 #' @param inm a matrix of values whose rownames constitute the x-axis
 #' @param xlab the xlabel, defaults to ""

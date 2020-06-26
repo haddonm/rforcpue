@@ -18,15 +18,17 @@
 #' labelM <- c("Year","Vessel","DepCat","Zone:Month")
 #' makeonemodel(labelM)
 #' makeonemodel(labelM,dependent="LnCE")
-makeonemodel <- function(labelModel,dependent = "LnCE") {
+makeonemodel <- function(labelModel,dependent = "LnCE") { # labelModel=labelM[1:i]; dependent = "LnCE"
   numvars <- length(labelModel)
   interterms <- grep(":", labelModel)
   ninter <- length(interterms)
   form <- paste0(dependent, " ~ ", labelModel[1])
-  for (i in 2:(numvars - ninter))
-    form <- paste0(form, " + ", labelModel[i])
-  if (ninter > 0) for (i in interterms) {
-    form <- paste0(form, " + ", labelModel[i])
+  if (numvars > 1) {
+    for (i in 2:(numvars - ninter))
+      form <- paste0(form, " + ", labelModel[i])
+    if (ninter > 0) for (i in interterms) {
+      form <- paste0(form, " + ", labelModel[i])
+    }
   }
   form <- as.formula(form)
   return(form)

@@ -5,3 +5,5 @@
 * 15-06-2020 Slight modifications to yearprop and factorprop to increase the output to the website
 
 * 26-06-2020 0.0.0.1800 Added ausmaps from cede along with a couple of extra plotting functions for data exploration (histyear). The need for a vignette is growing.
+
+* 26-06-2020 0.0.0.1800 Added a sps data-set to illustrate many of the internal functions.
