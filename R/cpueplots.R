@@ -165,6 +165,59 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
   text(lower+6*cebin,0.9*ymaxf,paste("StDev ",round(sdcef,3),sep=""),cex=labs,font=7)
 }  # end of diagnosticPlot
 
+#' @title histyear plots a histogram of a given variable for each year available
+#'
+#' @description histyear plots a histogram of a given variable for each year
+#'     available
+#'
+#' @param x the data.frame of data with at least a 'Year' and pickvar present
+#' @param Lbound leftbound on all histograms, defaults to -3.5
+#' @param Rbound right bound on all histograms, defaults to 12.25
+#' @param inc  the class width of the histogram, defaults to 0.25
+#' @param pickvar which variable to plot each year default = 'LnCE'
+#' @param years which variable name identifies the yaer column, default='Year'
+#' @param varlabel what label to use on x-axis, default = 'log(CPUE)'
+#' @param vline an optional vertical line to aid interpretation. If it is
+#'     numeric it will be added to each plot
+#' @param plots how many plots to generate, default = c(3,3)
+#'
+#' @return a matrix of the year, mean value, stdev, and N number of
+#'     observations. It also plots a histogram for each year and fits a
+#'     normal distribution to each one.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' print("still to be developed")
+#' }
+histyear <- function(x,Lbound=-3.5,Rbound=12.25,inc=0.25,
+                     pickvar="LnCE",years="Year",varlabel="log(CPUE)",
+                     vline=NA,plots=c(3,3)) {
+  yrs <- sort(unique(x[,years]))
+  nyr <- length(yrs)
+  columns <- c("Year","maxcount","Mean","StDev","N","Min","Max")
+  results <- matrix(0,nrow=nyr,ncol=length(columns),dimnames=list(yrs,columns))
+  par(mfcol=plots,mai=c(0.25,0.25,0.05,0.05),oma=c(1.2,1.0,0.0,0.0))
+  par(cex=0.75, mgp=c(1.35,0.35,0), font.axis=7,font=7,font.lab=7)
+  for (yr in 1:nyr) {
+    pick <- which(x[,years] == yrs[yr])
+    outh <- hist(x[pick,pickvar],breaks=seq(Lbound,Rbound,inc),col=2,main="",xlab="",ylab="")
+    mtext(paste0("  ",yrs[yr]),side=3,outer=F,line=-2,font=7,cex=0.9,adj=0)
+    mtext(paste0("  ",length(pick)),side=3,outer=F,line=-3,font=7,cex=0.9,adj=0)
+    if (is.numeric(vline)) abline(v=vline,col=4,lwd=2)
+    if (pickvar != "catch_kg") {
+      pickmax <- which.max(outh$counts)
+      ans <- addnorm(outh,x[pick,pickvar])
+      lines(ans$x,ans$y,col=3,lwd=2)
+      results[yr,] <- c(yrs[yr],outh$mids[pickmax],ans$stats,
+                        range(x[pick,pickvar],na.rm=TRUE))
+    }
+  }
+  mtext("Frequency",side=2,outer=T,line=0.0,font=7,cex=1.0)
+  mtext(varlabel,side=1,outer=T,line=0.0,font=7,cex=1.0)
+  return(results)
+} # end of histyear
+
 
 #' @title impactplot Plots relative contribution to CPUE trend of each Factor
 #'

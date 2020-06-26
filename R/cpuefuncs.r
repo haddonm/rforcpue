@@ -125,6 +125,38 @@ coef.outce <- function(inout) {   # S3 class development
    return(ans)
 } # end of coef.outce
 
+#' @title facttonum converts a vector of numeric factors into numbers
+#'
+#' @description facttonum converts a vector of numeric factors into numbers.
+#'     If the factors are not numeric then the outcome will be a series of NA.
+#'     It is up to you to apply this function only to numeric factors. A warning
+#'     will be thrown if the resulting output vector contains NAs
+#'
+#' @param invect the vector of numeric factors to be converted back to numbers
+#'
+#' @return an output vector of numbers instead of the input factors
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'  DepCat <- as.factor(rep(seq(100,600,100),2)); DepCat
+#'  5 * DepCat[3]
+#'  as.numeric(levels(DepCat))  # #only converts the levels not the replicates
+#'  DepCat <- facttonum(DepCat)
+#'  5 * DepCat[3]
+#'  x <- factor(letters)
+#'  facttonum(x)
+#' }
+facttonum <- function(invect){
+  if (class(invect) == "factor") {
+    outvect <- suppressWarnings(as.numeric(levels(invect))[invect])
+  }
+  if (class(invect) == "numeric") outvect <- invect
+  if (any(is.na(outvect)))
+    warning("NAs produced, your input vector may have non-numbers present \n")
+  return(outvect)
+} # end of facttonum
+
 #' @title fishery generates vectors of year, catch, effort, and cpue
 #'
 #' @description fishery generates vectors of year, catch, effort, and cpue
@@ -835,7 +867,39 @@ summary.outce <- function(x) {
    print(x$Parameters$coefficients)
 } # end of summary.outce
 
-
+#' @title tapsum simplifies the use of tapply for summarizing variables
+#'
+#' @description data exploration commonly uses the tapply function and tapsum
+#'     simplifies its use when obtaining the sum of any variable relative to
+#'     other variables. For example it is common to want the total catch by
+#'     year and, for example, Month, DepCat, Zone, etc.
+#'
+#' @param indat the data.frame containing the raw fishery data
+#' @param first the variable name (in quotes) being summed
+#' @param second the first grouping variable
+#' @param third the second grouping variable, defaults to NA
+#' @param div defaults to 1000 to change Kg to tonnes. set t0 1.0 or NA to
+#'     avoid its influence
+#'
+#' @return a vector or matrix of sums of the pickvar by the frist and optionally
+#'      the second grouping variable
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   data(sps)
+#'   tapsum(sps,"catch_kg","Year","Month")
+#' }
+tapsum <- function(indat,first,second,third=NA,div=1000) {
+  if (is.na(third)) {
+    result <- tapply(indat[,first],indat[,second],sum,na.rm=TRUE)
+  } else {
+    result <- tapply(indat[,first],list(indat[,second],indat[,third]),
+                     sum,na.rm=TRUE)
+  }
+  if (is.numeric(div)) result <- result/div
+  return(result)
+} # end of tapsum
 
 #' @title toXL copies a data.frame or matrix to the clipboard
 #'
