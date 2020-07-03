@@ -125,37 +125,40 @@ coef.outce <- function(inout) {   # S3 class development
    return(ans)
 } # end of coef.outce
 
-#' @title facttonum converts a vector of numeric factors into numbers
+#' @title expandmatrix reshapes a matrix of values into a 3 column data.frame
+#' 
+#' @description expandmatrix takes an oblong matrix of values and expands it
+#'     into a three column data.frame of row, column, value. This is then easier 
+#'     to plot as a scattergram or is used within categoryplot. It expects to 
+#'     have the year values in the columns = xvalues
 #'
-#' @description facttonum converts a vector of numeric factors into numbers.
-#'     If the factors are not numeric then the outcome will be a series of NA.
-#'     It is up to you to apply this function only to numeric factors. A warning
-#'     will be thrown if the resulting output vector contains NAs
+#' @param x a matrix of values 
 #'
-#' @param invect the vector of numeric factors to be converted back to numbers
-#'
-#' @return an output vector of numbers instead of the input factors
+#' @return a 3-column matrix of (rows x cols) rows from the input matrix
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#'  DepCat <- as.factor(rep(seq(100,600,100),2)); DepCat
-#'  5 * DepCat[3]
-#'  as.numeric(levels(DepCat))  # #only converts the levels not the replicates
-#'  DepCat <- facttonum(DepCat)
-#'  5 * DepCat[3]
-#'  x <- factor(letters)
-#'  facttonum(x)
-#' }
-facttonum <- function(invect){
-  if (class(invect) == "factor") {
-    outvect <- suppressWarnings(as.numeric(levels(invect))[invect])
-  }
-  if (class(invect) == "numeric") outvect <- invect
-  if (any(is.na(outvect)))
-    warning("NAs produced, your input vector may have non-numbers present \n")
-  return(outvect)
-} # end of facttonum
+#' x <- matrix(rnorm(25,5,1),nrow=5,ncol=5,dimnames=list(1:5,1:5))
+#' res <- expandmatrix(x)
+#' res
+expandmatrix <- function(x) { #  x=t(numyr)
+   ylabel <- as.numeric(rownames(x))
+   xlabel <- as.numeric(colnames(x))
+   nx <- length(xlabel)
+   ny <- length(ylabel)
+   res <- as.data.frame(matrix(0,nrow=(nx*ny),ncol=3))
+   count <- 0
+   for (i in 1:nx) {
+      for (j in 1:ny) {
+         count <- count + 1
+         res[count,] <- c(xlabel[i],ylabel[j],x[j,i])
+      }
+   }
+   rownames(res) <- paste0(res[,1],"_",res[,2])
+   colnames(res) <- c("rows","cols","value")
+   
+   return(res)
+} # end of expandmatrix
 
 #' @title fishery generates vectors of year, catch, effort, and cpue
 #'
@@ -878,10 +881,10 @@ summary.outce <- function(x) {
 #' @param first the variable name (in quotes) being summed
 #' @param second the first grouping variable
 #' @param third the second grouping variable, defaults to NA
-#' @param div defaults to 1000 to change Kg to tonnes. set t0 1.0 or NA to
+#' @param div defaults to 1000 to change Kg to tonnes. set to 1.0 or NA to
 #'     avoid its influence
 #'
-#' @return a vector or matrix of sums of the pickvar by the frist and optionally
+#' @return a vector or matrix of sums of the pickvar by the first and optionally
 #'      the second grouping variable
 #' @export
 #'

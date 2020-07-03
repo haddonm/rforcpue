@@ -354,16 +354,3 @@ plotpolys <- function(intmp,leftlong,rightlong,uplat,downlat,leg="topleft",
    return(invisible(totcat))
 } # end of plotpolys
 
-#' @title removeEmpty - removes empty strings from a vector of strings
-#'
-#' @description removeEmpty - removes empty strings from a vector of strings
-#' @param invect - a vector of characters
-#' @return a vector of strings without empty ones
-#' @export removeEmpty
-#' @examples
-#' inputtxt <- "a  b   c   g"
-#' x <- unlist(strsplit(inputtxt," "))
-#' print(x)
-#' print(removeEmpty(x))
-removeEmpty <- function(invect) return(invect[nchar(invect) > 0])
-

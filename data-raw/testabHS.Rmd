@@ -83,7 +83,7 @@ The data.frame _ab_ contains all available docket data with no filtering except 
 
 ```{r}
 # First get the data
-datafile <- paste0(datadir,"/CatchEffortData_2020-02-11.RData")
+datafile <- paste0(datadir,"/CatchEffortData_2020-06-15.RData")
 load(datafile)
 ab <- abCEbl # simplify, simplify, simplify! Don't you just mean simplify?
 columns <- colnames(ab) 
@@ -167,6 +167,7 @@ ab3 <- droplevels(ab[-pickrec2,])
 ```{r fig.width=6, fig.height=6}
 # tabulate blocks --------------------------
 cbby <- tapply(ab1$catch,list(ab1$year,ab1$block),sum,na.rm=T)/1000
+cebby <- tapply(ab1$cpue,list(ab1$year,ab1$block),geomean) 
 numb <- ncol(cbby)
 aav <- numeric(numb)
 for (i in 1:numb) aav[i] <- getaav(cbby[,i])
@@ -189,7 +190,24 @@ plot(yrs,yrtotC,type="l",lwd=2,ylim=c(0,ymax),panel.first=grid(),
 text(2009,0.9*ymax,round(getaav(yrtotC),3),cex=0.9,pos=4)
 ```
 
-Note well that the y-axes vary greatly between blocks. The numbers on each plot represent the annual absolute variability in catch and the total catch (tonnes) in each block. In the Zone Total plot only tyhe aav is shown; it is the lowest of all, illustrating that the variation among blocks cancels itself out to a large degree across the zone. Across the zone the catches between years are relatively smooth but within some individual blocks the variation is extreme. In the northern blocks from block 23 northward, there have been extreme catch events where the catches more than doubled over very short periods followed by declines. Some blocks appear to have never recovered from such declines (26, 27, 28, and 30). In amongst these changes in catch levels ther have also been changes to the legal minimum length which was only 132mm up until it was increased to 136mm in 2002, and 138mm in 2006.
+Note well that the y-axes vary greatly between blocks. The numbers on each plot represent the annual absolute variability in catch and the total catch (tonnes) in each block. In the Zone Total plot only tyhe aav is shown; it is the lowest of all, illustrating that the variation among blocks cancels itself out to a large degree across the zone. Across the zone the catches between years are relatively smooth but within some individual blocks the variation is extreme. In the northern blocks from block 23 northward, there have been extreme catch events where the catches more than doubled over very short periods followed by declines. Some blocks appear to have never recovered from such declines (26, 27, 28, and 30). In amongst these changes in catch levels ther have also been changes to the legal minimum length which was only 132mm up until it was increased to 136mm in 2002, and 138mm in 2006. Although in block 31 (31A) the LML went the other way moving to 132 from 138 in 2010, there was also management encouragement to move ctach into 31 in subsequent years. 
+
+```{r fig.width=6, fig.height=5}
+blk <- "31"
+cbby <- tapply(ab1$catch,list(ab1$year,ab1$block),sum,na.rm=T)/1000
+cebby <- tapply(ab1$cpue,list(ab1$year,ab1$block),geomean) 
+yrs <- as.numeric(rownames(cbby))
+parset(plots=c(2,1),margin=c(0.25,0.35,0.05,0.05))
+ymax <- getmax(cbby[,blk])
+plot(yrs,cbby[,blk],type="l",lwd=2,ylim=c(0,ymax),panel.first=grid(),
+       ylab=paste0("Catch_",blk),xlab="",yaxs="i")
+ymax <- getmax(cebby[,blk])
+plot(yrs,cebby[,blk],type="l",lwd=2,ylim=c(0,ymax),panel.first=grid(),
+       ylab=paste0("CPUE_",blk),xlab="",yaxs="i")
+
+
+```
+
 
 ## Zone-Wide CPUE
 

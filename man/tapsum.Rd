@@ -15,11 +15,11 @@ tapsum(indat, first, second, third = NA, div = 1000)
 
 \item{third}{the second grouping variable, defaults to NA}
 
-\item{div}{defaults to 1000 to change Kg to tonnes. set t0 1.0 or NA to
+\item{div}{defaults to 1000 to change Kg to tonnes. set to 1.0 or NA to
 avoid its influence}
 }
 \value{
-a vector or matrix of sums of the pickvar by the frist and optionally
+a vector or matrix of sums of the pickvar by the first and optionally
      the second grouping variable
 }
 \description{

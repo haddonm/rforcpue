@@ -7,3 +7,5 @@
 * 26-06-2020 0.0.0.1800 Added ausmaps from cede along with a couple of extra plotting functions for data exploration (histyear). The need for a vignette is growing.
 
 * 26-06-2020 0.0.0.1800 Added a sps data-set to illustrate many of the internal functions.
+
+* 03-07-2020 0.0.0.1750 Added categoryplot and other utility functions

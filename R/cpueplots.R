@@ -71,6 +71,63 @@ addnorm <- function(inhist,xdata,inc=0.01) {
   return(ans)
 } # end of addnorm
 
+#' @title categoryplot generates a bubble plot of the contents of a matrix
+#' 
+#' @description categoryplot generates a bubble plot of the contents of a matrix
+#'     in an effort to visualize 2-D trends in the data. It must have the numeric
+#'     year variable in the columns. So if using table or tapply to generate the
+#'     matrix put year last in the list of variables. 
+#'
+#' @param x the matrix of values to be plotted
+#' @param xlab the label for the x-axis, default=''
+#' @param ylab the label for the y-axis, default=''
+#' @param mult the multiplier for the values. Should be selected so that the 
+#'     circles produce a visual representation of the variation in the data
+#' @param gridx should grey grid-lines be added for each year. default=FALSE
+#' @param addtotal should the sum of the year columns be printed at the top of
+#'     the diagram. default=FALSE
+#' @param addlines if addtotal is TRUE then a number of lines are added at the 
+#'     top of the plot. This argument determines the number of extra lines. 
+#'     default=4, but if only a few then a smaller number would be more 
+#'     appropriate. If addtotal = FALSE, then addlines is ignored
+#'
+#' @return nothing but it does generate a plot
+#' @export
+#'
+#' @examples
+#' xmat <- matrix(rnorm(25,5,2),nrow=5,ncol=5,dimnames=list(1:5,1:5))
+#' categoryplot(xmat,mult=0.03,ylab="Random Numbers",addtotal=TRUE,addline=2)
+categoryplot <- function(x,xlab="",ylab="",mult=0.1,gridx=FALSE,addtotal=FALSE,
+                         addlines=4) {  
+  xlabel <- colnames(x)
+  nx <- length(xlabel)
+  years <- as.numeric(xlabel) # assumes columns are years
+  ylabel <- rownames(x) # make no assumption about rows. can be categorical
+  ny <- length(ylabel)
+  yvar <- seq(1,ny,1)
+  upy <- ny+1
+  if (addtotal) upy <- ny+addlines
+  yrtot <- colSums(x,na.rm=TRUE)
+  countyr <- apply(x,2,countgtzero)
+  xval <- x
+  rownames(xval) <- yvar
+  values <- expandmatrix(xval)
+  plotprep(width=7, height=6, newdev=FALSE)
+  parset(cex=0.85)
+  plot(values[,1],values[,2],type="n",xlab=xlab,ylab=ylab,ylim=c(0,upy),
+       yaxs="i",yaxt="n",xaxt="n",xaxs="r")
+  axis(side=1,at=xlabel,labels=xlabel)
+  axis(side=2,at=yvar,labels=ylabel)
+  if (gridx) 
+     for (i in 1:nx) abline(v=xlabel[i],lwd=1,lty=3,col="grey")
+  for (i in 1:nx) # i = 1
+    symbols(rep(xlabel[i],ny),1:ny,circles=(mult*x[,i]),inches=FALSE,add=TRUE,
+            bg=rgb(1, 0, 0, 0.5), fg = "black")
+  if (addtotal)
+     for (yr in 1:nx) text(years[yr],(ny+addlines/2),round(yrtot[yr],1))
+  return(invisible(list(yrtotal=yrtot,yrcount=countyr)))
+} # end of categoryplot
+
 
 #' @title diagnosticPlot produces diagnostic plots of the regression.
 #'

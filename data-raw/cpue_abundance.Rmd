@@ -126,6 +126,7 @@ ab <- droplevels(ab[-pick,])      # any 2020 records
 dim(ab)
 ```
 
+##### p
 ## Reported Catch vs TAC
 
 ```{r}
@@ -138,6 +139,9 @@ colnames(cbzy) <- c("year",label)
 kable(halftable(cbzy,yearcol="year",subdiv=2),digits=c(3,3,3,3,3,3,3,3))
 tacs <- read.csv(file=paste0(rawdir,"abaloneTAC.csv"),header=TRUE)
 ```
+
+###### l
+###### l
 
 ```{r fig.width=6, fig.height=5}
 plotprep(width=7,height=5,newdev=FALSE)
@@ -174,6 +178,15 @@ ab3 <- droplevels(ab[-pickrec2,])
 dim(ab1)
 ```
 
+###### l
+
+
+The zone total _aav_ is the lowest of all, illustrating that the variation among blocks cancels itself out to a large degree across the zone. Across the zone the catches between years are relatively smooth though mostly declining but within many individual blocks the variation is extreme. In the northern blocks from block 23 northward, there have been extreme catch events where the catches more than doubled over very short periods followed by declines. Some of these blocks appear to have never recovered from such declines (26, 27, 28, and 30).
+
+In amongst these changes in catch levels there were changes to the legal minimum length which was 132mm up until 2002 when it was increased to 136mm, and then up to 138mm in 2006. The second peak of catches in block 31 was the result of a reduction in legal minimum length from 136mm to 132mm in 2010 [is the LML in block 31 still 132mm? This is another sad/tragic case akin to blocks 5 and 49!]. 
+
+It is clear that the eastern zone fishery, now with a TAC = 294t, has become highly dependent upon the productivity of the eastern part of block 13, which includes the Acteaon Islands. It is also clear that over the five year period from 2015 - 2019 the RBC has declined so that the 2019 recommended catch is only 47.6% of that in 2015 and only 24.7% of that in 2000 at the start of zonation. An examination of the standardized cpue for the eastern zone along with the associated total catch illustrates why such large changes in TAC had to occur.
+
 ### Catch per Block
 
 
@@ -204,11 +217,6 @@ text(2009,0.95*ymax,round(getaav(yrtotC),3),cex=0.9,pos=4)
 Figure 2. The catch in tonnes per block from 1992 - 2019. The numbers across the top of each plot represent the annual absolute variability in catch and the total catch (tonnes) in each block. Block 13 is in the south-east and block 31 in the north-east. The y-axes vary greatly between blocks, with some like Block 25 reaching 3t, and others, such as block 13 reaching 500t. In the Zone Total plot only the aav is shown.
 
 
-The zone total _aav_ is the lowest of all, illustrating that the variation among blocks cancels itself out to a large degree across the zone. Across the zone the catches between years are relatively smooth though mostly declining but within many individual blocks the variation is extreme. In the northern blocks from block 23 northward, there have been extreme catch events where the catches more than doubled over very short periods followed by declines. Some of these blocks appear to have never recovered from such declines (26, 27, 28, and 30).
-
-In amongst these changes in catch levels there were changes to the legal minimum length which was 132mm up until 2002 when it was increased to 136mm, and then up to 138mm in 2006. The second peak of catches in block 31 was the result of a reduction in legal minimum length from 136mm to 132mm in 2010 [is the LML in block 31 still 132mm? This is another sad/tragic case akin to blocks 5 and 49!]. 
-
-It is clear that the eastern zone fishery, now with a TAC = 294t, has become highly dependent upon the productivity of the eastern part of block 13, which includes the Acteaon Islands. It is also clear that over the five year period from 2015 - 2019 the RBC has declined so that the 2019 recommended catch is only 47.6% of that in 2015 and only 24.7% of that in 2000 at the start of zonation. An examination of the standardized cpue for the eastern zone along with the associated total catch illustrates why such large changes in TAC had to occur.
 
 
 ## Zone-Wide CPUE
@@ -250,6 +258,9 @@ model1 <- standLM(mods,ab3,splabel,console=TRUE)
 
 The optimum model is essentially coincident when all divers are used or only those who have fished for more than 1 year. This is not surprising given that removing those 33 divers only removed 219 records out of 82102 records, and only 50.57t out of 22853.14t.
 
+From 1992 to 1998 the cpue increases and so do the catches until there was 1500t being taken from the east coast from a State-wide TAC of 2520t (which included both blacklip and greenlip), so 59.5% of the total came from east coast blacklip. Despite the use of a legal minimum length (LML) implying there would be a time-lag between taking these catches and observing their impacts, at that time this appeared to be a positive sign that the fishery was not having a serious impact on the eastern stock. With a LML of 132mm the lag was thought to be between 4 to 5 years so a positive run of seven years supported the postive view. However, from 1998 to 2002 the cpue declined 42% from an average of about 87kg/hr to only about 51kg/hr. This also led to a decline in the reported catches from 1501t down to 848t. The east and west zones were introduced in 2000 with a major objective of re-distributing catch from the east coast to the west, and the LML in the eastern zone in crease to 136mm in 2002. Zonationwas aimed at spreading the catch spatially and the increase in the LML was aimed at providing a longer refuge from fishing mortality to aid larval production.
+
+
 ```{r fig.width=6, fig.height=5}
 geom <- geomean(ab2$cpue)
 plotstand(model1,bars=TRUE,geo=geom,catch=yrtotC)
@@ -258,7 +269,6 @@ plotstand(model1,bars=TRUE,geo=geom,catch=yrtotC)
 
 [This is an appalling plot in so many ways!!!]
 
-From 1992 to 1998 the cpue increases and so do the catches until there was 1500t being taken from the east coast from a State-wide TAC of 2520t (which included both blacklip and greenlip), so 59.5% of the total came from east coast blacklip. Despite the use of a legal minimum length (LML) implying there would be a time-lag between taking these catches and observing their impacts, at that time this appeared to be a positive sign that the fishery was not having a serious impact on the eastern stock. With a LML of 132mm the lag was thought to be between 4 to 5 years so a positive run of seven years supported the postive view. However, from 1998 to 2002 the cpue declined 42% from an average of about 87kg/hr to only about 51kg/hr. This also led to a decline in the reported catches from 1501t down to 848t. The east and west zones were introduced in 2000 with a major objective of re-distributing catch from the east coast to the west, and the LML in the eastern zone in crease to 136mm in 2002. Zonationwas aimed at spreading the catch spatially and the increase in the LML was aimed at providing a longer refuge from fishing mortality to aid larval production.
 
 After little improvement in cpue the eastern TAC was reduced in 2004 and was held at an average of 767t until 2007 after which it increased each year to a TAC of 887t in 2010. It should be noted that cpue between 2006 - 2008 (average ~ 85.6kg/hr) was approximately the same as between 1996 - 1998 (average ~ 87.6kg/hr) and yet average catches for the two periods were 1332.2t and 780.9t respectively (a 42% decline).
 
@@ -336,6 +346,7 @@ round(cpue,5)
 
 Suggests that 99.9786% of records are retained if we place an upper limit of 340 on the cpue, despite the maximum value reported being 780kg/hr.
 
+##### p
 
 A comparison of the reported total Eastern zone catch relative to the TAC indicates that the TAC is taken every year with only minor deviations. There is an average of 1.38% of the TAC not caught though the actual figure has varied from -0.024% up to 5.038%. The largest amount not taken in a year occurred in 2019 where 60t, or 5% of the TAC was not taken. 
 
@@ -348,12 +359,13 @@ eastcat <- cbind(cbz,totC=totC,blTAC=blTAC,diff=diff,prop=100*diff/blTAC)
 kable(eastcat,digits=c(3,3,3,3,3,1,3,2))
 ```
 
-
+###### l
 
 ### Equation for Average Annual Variability of Catch
 
 $$aav=100\sum\limits_{t}\left(\frac{\left|C_t-C_{t-1}\right|}{\sum{C_t}} \right)$$
 
+where $C_t$ is the reported catch in year $t$, and the $|C_t-C_{t-1}|$ symbol denotes the absolute difference between the catches of two successive years. The multiplication by 100 turns this into a percentage rather than a proportion.
 
 
 
