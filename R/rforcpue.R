@@ -90,7 +90,7 @@ NULL
 #' @import makehtml
 #' @importFrom grDevices png rgb dev.cur dev.new dev.off
 #' @importFrom stats anova as.formula dnorm lm median qnorm qqline qqnorm
-#' @importFrom stats quantile sd loess ccf
+#' @importFrom stats quantile sd loess ccf coef
 #' @importFrom utils data read.csv str tail write.table
 NULL
 

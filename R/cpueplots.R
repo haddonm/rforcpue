@@ -85,10 +85,11 @@ addnorm <- function(inhist,xdata,inc=0.01) {
 #'     circles produce a visual representation of the variation in the data
 #' @param gridx should grey grid-lines be added for each year. default=FALSE
 #' @param addtotal should the sum of the year columns be printed at the top of
-#'     the diagram. default=FALSE
+#'     the diagram. default=FALSE. If TRUE it prints the column totals 
+#'     sequentially addlines-2 lines and then addlines-1 lines above the circles
 #' @param addlines if addtotal is TRUE then a number of lines are added at the 
 #'     top of the plot. This argument determines the number of extra lines. 
-#'     default=4, but if only a few then a smaller number would be more 
+#'     default=3, but if only a few then a smaller number would be more 
 #'     appropriate. If addtotal = FALSE, then addlines is ignored
 #'
 #' @return nothing but it does generate a plot
@@ -98,7 +99,7 @@ addnorm <- function(inhist,xdata,inc=0.01) {
 #' xmat <- matrix(rnorm(25,5,2),nrow=5,ncol=5,dimnames=list(1:5,1:5))
 #' categoryplot(xmat,mult=0.03,ylab="Random Numbers",addtotal=TRUE,addline=2)
 categoryplot <- function(x,xlab="",ylab="",mult=0.1,gridx=FALSE,addtotal=FALSE,
-                         addlines=4) {  
+                         addlines=3) {  
   xlabel <- colnames(x)
   nx <- length(xlabel)
   years <- as.numeric(xlabel) # assumes columns are years
@@ -124,7 +125,12 @@ categoryplot <- function(x,xlab="",ylab="",mult=0.1,gridx=FALSE,addtotal=FALSE,
     symbols(rep(xlabel[i],ny),1:ny,circles=(mult*x[,i]),inches=FALSE,add=TRUE,
             bg=rgb(1, 0, 0, 0.5), fg = "black")
   if (addtotal)
-     for (yr in 1:nx) text(years[yr],(ny+addlines/2),round(yrtot[yr],1))
+    incstep <- addlines - 3
+    for (yr in 1:nx) {
+       oddeven <- yr %% 2
+       if (oddeven == 0) text(years[yr],(ny+incstep),round(yrtot[yr],1))
+         else  text(years[yr],(ny+incstep+1),round(yrtot[yr],1))
+    }
   return(invisible(list(yrtotal=yrtot,yrcount=countyr)))
 } # end of categoryplot
 
@@ -237,8 +243,12 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
 #' @param vline an optional vertical line to aid interpretation. If it is
 #'     numeric it will be added to each plot
 #' @param plots how many plots to generate, default = c(3,3)
+#' @param normadd should a normal distribution be added to each plot. 
+#'     default=TRUE
+#' @param left on which side of each plot should the year and number of records 
+#'     be placed left=TRUE is the default. left=FALSE will place text on right
 #'
-#' @return a matrix of the year, mean value, stdev, and N number of
+#' @return invisibly, a matrix of the year, mean value, stdev, and N number of
 #'     observations. It also plots a histogram for each year and fits a
 #'     normal distribution to each one.
 #' @export
@@ -249,20 +259,22 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
 #' }
 histyear <- function(x,Lbound=-3.5,Rbound=12.25,inc=0.25,
                      pickvar="LnCE",years="Year",varlabel="log(CPUE)",
-                     vline=NA,plots=c(3,3)) {
+                     vline=NA,plots=c(3,3),normadd=TRUE,left=TRUE) {
   yrs <- sort(unique(x[,years]))
   nyr <- length(yrs)
   columns <- c("Year","maxcount","Mean","StDev","N","Min","Max")
   results <- matrix(0,nrow=nyr,ncol=length(columns),dimnames=list(yrs,columns))
   par(mfcol=plots,mai=c(0.25,0.25,0.05,0.05),oma=c(1.2,1.0,0.0,0.0))
   par(cex=0.75, mgp=c(1.35,0.35,0), font.axis=7,font=7,font.lab=7)
+  if (left) adj=0 else adj=1
   for (yr in 1:nyr) {
-    pick <- which(x[,years] == yrs[yr])
+    pick <- which((x[,years] == yrs[yr]) & (x[,pickvar] >= Lbound) &
+                  (x[,pickvar] <= Rbound))  
     outh <- hist(x[pick,pickvar],breaks=seq(Lbound,Rbound,inc),col=2,main="",xlab="",ylab="")
-    mtext(paste0("  ",yrs[yr]),side=3,outer=F,line=-2,font=7,cex=0.9,adj=0)
-    mtext(paste0("  ",length(pick)),side=3,outer=F,line=-3,font=7,cex=0.9,adj=0)
+    mtext(paste0("  ",yrs[yr]),side=3,outer=F,line=-2,font=7,cex=0.9,adj=adj)
+    mtext(paste0("  ",length(pick)),side=3,outer=F,line=-3,font=7,cex=0.9,adj=adj)
     if (is.numeric(vline)) abline(v=vline,col=4,lwd=2)
-    if (pickvar != "catch_kg") {
+    if (normadd) {
       pickmax <- which.max(outh$counts)
       ans <- addnorm(outh,x[pick,pickvar])
       lines(ans$x,ans$y,col=3,lwd=2)
@@ -272,7 +284,7 @@ histyear <- function(x,Lbound=-3.5,Rbound=12.25,inc=0.25,
   }
   mtext("Frequency",side=2,outer=T,line=0.0,font=7,cex=1.0)
   mtext(varlabel,side=1,outer=T,line=0.0,font=7,cex=1.0)
-  return(results)
+  return(invisible(results))
 } # end of histyear
 
 
@@ -868,6 +880,62 @@ qqdiag <- function(inmodel,plotrug=FALSE,bins=NA,hline=0.0,
    lines(ans$y,ans$x,lwd=2,col=3)
    return(invisible(outL))
 }  # end of qqdiag
+
+#' @title xyplotyear generates nyear xy plots from a data.frame
+#' 
+#' @description xyplotyear meets a common need that occurs when we have xy data
+#'     from multiple years and want to plot them we can use xyplotyear. The 
+#'     y-label for each plot is the year of data. The numeric label at the top 
+#'     of each plot includes the number of observations, the gradient of the
+#'     regression, if included, and the sum of the yvar for each year. The same
+#'     y-axis scale is used for each plot.
+#'
+#' @param x the data.frame containing the data
+#' @param yvar the character name of y-axis column in the data.frame x 
+#' @param xvar the character name of x-axis column in the data.frame x 
+#' @param year the name of the year variable, default="year"
+#' @param plotnum a vector of rows and cols for the plots, default=c(1,1). This
+#'     assumes that the columns are filled first using mfcol
+#' @param xlim the range of the xvar to be plotted, default=c(0,12)
+#' @param addline should a linear regression be fitted and added to each plot
+#'     default=TRUE
+#' @param xlab the  generic label for the x-axis, default='', if left empty the 
+#'     xvar name will be used
+#' @param ylab the generic label for the y-axis, default='', if left empty the 
+#'     yvar name will be used
+#'
+#' @return currently nothing but it does plot a graph
+#' @export
+#'
+#' @examples
+#' print("wait on internal data")
+xyplotyear <- function(x,yvar="",xvar="",year="year",plotnum=c(1,1),
+                       xlim=c(0,12),addline=TRUE,xlab="",ylab="") {
+  ymax <- getmax(x[,yvar],mult=1.15)
+  parset(plots=plotnum,margin=c(0.2,0.35,0.05,0.05),outmargin=c(1.5,1.5,0,0), 
+         cex=0.7,byrow=FALSE)
+  yrs <- sort(unique(x[,year]))
+  nyr <- length(yrs)
+  for (i in 1:nyr) {
+    pickY <- which(x[,year] == yrs[i])
+    N <- length(pickY)
+    ab3 <- droplevels(x[pickY,])
+    plot(ab3[,xvar],ab3[,yvar],type="p",pch=1,xlab="",ylab=yrs[i],
+         xlim=xlim,xaxs="i",ylim=c(0,ymax))
+    label <- paste0(N," ",round(sum(ab3[,yvar],na.rm=TRUE)/1000,2))
+    if (addline) {
+      model <- lm(ab3[,yvar] ~ ab3[,xvar])
+      abline(model,lwd=2,col=2)
+      label <- paste0(N," _ ",round(coef(model)[2],2)," _ ",
+                      round(sum(ab3[,yvar],na.rm=TRUE)/1000,2))
+    }
+    text(0,0.95*ymax,label,cex=0.8,pos=4)
+  }
+  if (nchar(xlab) == 0) xlab <- xvar
+  if(nchar(ylab) == 0) ylab <- yvar
+  mtext(xlab,side=1,line=0,cex=1.0,outer=TRUE)
+  mtext(ylab,side=2,line=0,cex=1.0,outer=TRUE)
+} # end of xyplotyear
 
 
 #' @title yearBubble Generates a bubbleplot of x against Year.

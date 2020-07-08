@@ -11,7 +11,7 @@ categoryplot(
   mult = 0.1,
   gridx = FALSE,
   addtotal = FALSE,
-  addlines = 4
+  addlines = 3
 )
 }
 \arguments{
@@ -27,11 +27,12 @@ circles produce a visual representation of the variation in the data}
 \item{gridx}{should grey grid-lines be added for each year. default=FALSE}
 
 \item{addtotal}{should the sum of the year columns be printed at the top of
-the diagram. default=FALSE}
+the diagram. default=FALSE. If TRUE it prints the column totals 
+sequentially addlines-2 lines and then addlines-1 lines above the circles}
 
 \item{addlines}{if addtotal is TRUE then a number of lines are added at the 
 top of the plot. This argument determines the number of extra lines. 
-default=4, but if only a few then a smaller number would be more 
+default=3, but if only a few then a smaller number would be more 
 appropriate. If addtotal = FALSE, then addlines is ignored}
 }
 \value{

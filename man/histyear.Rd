@@ -13,7 +13,9 @@ histyear(
   years = "Year",
   varlabel = "log(CPUE)",
   vline = NA,
-  plots = c(3, 3)
+  plots = c(3, 3),
+  normadd = TRUE,
+  left = TRUE
 )
 }
 \arguments{
@@ -35,9 +37,15 @@ histyear(
 numeric it will be added to each plot}
 
 \item{plots}{how many plots to generate, default = c(3,3)}
+
+\item{normadd}{should a normal distribution be added to each plot. 
+default=TRUE}
+
+\item{left}{on which side of each plot should the year and number of records 
+be placed left=TRUE is the default. left=FALSE will place text on right}
 }
 \value{
-a matrix of the year, mean value, stdev, and N number of
+invisibly, a matrix of the year, mean value, stdev, and N number of
     observations. It also plots a histogram for each year and fits a
     normal distribution to each one.
 }

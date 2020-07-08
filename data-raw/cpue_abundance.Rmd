@@ -62,22 +62,27 @@ Craig Mundy$^{1}$ and Malcolm Haddon$^{1,2}$
 
 # Objective(s)
 
-The intent of this outline manuscript is to begin to piece together analysis of the validity of using cpue with wild caught abalone. This is a synthesis of discussions about this subject that you and I started a couple of times but never really took anywhere. Its importance lies in the fact that all Australian abalone harvest strategies are empirical and use catch-rates of some kind (surveys are catch-rates).
+The intent of this outline manuscript is to begin to piece together analyses of the validity of using cpue as an index of relative abundance with wild caught abalone. This is a synthesis of discussions about this subject that Craig and I started a couple of times but never took anywhere. Its importance lies in the fact that all Australian abalone harvest strategies are empirical and use catch-rates of some kind (surveys are catch-rates).
+
+In brief, the use of naive or even standardized cpue is flawed in that the same cpue level can be obtained from teh stock when the stock fished is at very different levels of depletion. Nevertheless, there is information about the state of the stock when cpue, along with the catch and effort that give rise to it, are considered together. 
 
 # Introduction
 
-Australia still has a number of wild abalone fisheries but, as with all abalone fisheries, their management remains difficult for many reasons the most important of which is the complex spatial structure exhibited by the biological properties at different locations. This spatial structure influences the productivity of different reefs and the size structure of the abalone typically caught in different locations.
+Australia still has a number of significantly large wild abalone fisheries, with a national annual total catch of xxxx t. However, as with all abalone fisheries, their management remains difficult for many reasons, the most important of which is the complex spatial structure exhibited by the biological properties at different locations. This spatial structure influences the productivity of different reefs and the size structure of the abalone typically caught in different locations.
 
-The patchiness that is typical in abalone fisheries also influences observed catch-rates, and all Australian abalone fisheries use catch-rates of one kind or another in their harvest strategies, even where the harvest strategy is informal. This work aims to examine the validity of using abalone catch-rates in an important part of the Tasmanian fishery, which remains one of the largest in the world in terms of yield. 
+The patchiness in biological properties, abudnance, and productivity that is typical in abalone fisheries also influences observed catch-rates, and all Australian abalone fisheries use catch-rates of one kind or another in their harvest strategies, even where the harvest strategy is informal. This work aims to examine the validity of using abalone catch-rates in an important part of the Tasmanian fishery, which remains one of the largest in the world in terms of yield. 
 
-Despite their on-going use, abalone catch-rates have a bad reputation and are considered unreliable because they are generally considered to suffer from hyper-stability, with a consequent risk of serial depletion of patches of abalone along a coast. The mis-match between the reputation of abalone catch-rates and their continued use in practice means that a closer examination of significant current abalone fisheries may illuminate under what circumstances catch-rates can be useful and when they should not be trusted.
+The notion that abalone catch rates are generally uninformative was first formally emphasized by Sloan and Breen (1988), who summarized less formal reviews by Breen (1980) and by Fedorenko and Sprout (1982). Their main point was that abalone fisheries are prone to serial depletion and this led to catch rates becoming uninformative about relative abundance. So, abalone catch-rates have a bad reputation in fisheries (Breen, 1992; Prince and Shepherd, 1992; Shephard and Rodda, 2001) and are considered unreliable because they are generally considered to suffer from hyper-stability, with a consequent risk of serial depletion of patches of abalone along a coast.  If fishers sequentially harvest and deplete separate beds then catches can be maintained or even increased with no comparable decline in catch rates becoming apparent despite the stock as a whole declining; this would constitute the classic cause of hyper-stable catch rates.  Nevertheless, despite their poor reputation with abalone they continue to be used in Australia. 
 
-An examination of whether abalone catch-rates can be used as a valid foundation of processes to provide management advice entails examining how well the current conceptual framework used to describe catch-rates matches the reality of the operation of abalone fisheries. The primary assumption when using catch-rates from commercial fisheries is that they provide a valid measure of the relative abundance of exploitable biomass. As a relative measure they are only potentially useful given a time-series of estimates.
+The mis-match between the reputation of abalone catch-rates and their continued use in practice means that a closer examination of significant current abalone fisheries may illuminate under what circumstances catch-rates can be useful and when they should not be trusted.
 
-Another major assumption behind the notion that catch-rates (cpue) provide a measure of relative abundance is that the members of stock constitute a dynamic-pool of individuals. The dynamic-pool assumption is fundamentally about the mixing rate within a population and implies that fishing mortality (or some other process) applied in one part of a fishery will influence all other parts of the fishery within a short period of time. With Tasmanian blacklip abalone (_Haliotis rubra_) the mixing rate is very local and very low (Miller _et al_, 2009) and seriously breaks the dynamic pool assumption that is a part of so much of fisheries science theory. This affects the potential relationship between observed catch-rates and relative abundance in terms of what is termed the 'catchability'. Catchability is usually defined as the proportion of the exploitable biomass taken by one unit of effort.
+An examination of whether abalone catch-rates can be used as a valid foundation of processes to provide management advice entails examining how well the current conceptual framework used to describe catch-rates matches the reality of the operation of abalone fisheries. The primary assumption when using catch-rates from commercial fisheries is that they provide a valid measure of the relative abundance of exploitable biomass. It is important to realize that, as a relative measure, they are only potentially useful given a time-series of estimates, one or just a few observations will not exhibit a convincing trend.
 
-$$I_t=qB^E_t$$
-where $I_t$ is the cpue during time $t$, $B^E_t$ is the average exploitable biomass available during time $t$, and $q$ is the catchability for a given fishing method (this cold also be given a time subscript). With the complex spatial exhibited by abalone populations the problem lies with the notion of available exploitable biomass. With highly mixed scale-fisheries estimates of $q$ are invariably very small numbers. However, an abalone diver operating on a particular reef could take an appreciable proportion of all legal sized abalone so $q$ could easily be or the order of 0.5 or higher. Generally the fishery operates at such small scales whereas the assessment and management tends to operate at larger scales.  
+Another important assumption behind the notion that catch-rates (cpue) provide a measure of relative abundance is that the members of stock constitute a dynamic-pool of individuals. The dynamic-pool assumption is fundamentally about the mixing rate within a population and implies that fishing mortality (or some other process) applied in one part of a fishery will influence all other parts of the fishery within a short period of time (usually this means within a year). With Tasmanian blacklip abalone (_Haliotis rubra_) the mixing rate is very local and very low (Miller _et al_, 2009) and seriously breaks the dynamic pool assumption when considering a complete quota zone rather than the much smaller areas within which it might be valid. This affects the potential relationship between observed catch-rates and relative abundance in terms of what is termed the 'catchability'. Catchability is usually defined as the proportion of the exploitable biomass taken by one unit of effort.
+
+$$I_t=qB^{\lambda}_t$$
+where $I_t$ is the cpue during time $t$, $B^{\lambda}_t$ is the average exploitable biomass available during time $t$, $q$ is the catchability for a given fishing method (this could also be given a time subscript), and $\lambda$ is an exponent
+that can be used to describe non-linearity in the relationship between CPUE and exploitable biomass (usually it is set $\lambda=1$). With the complex spatial structure exhibited within abalone fisheries the problem with the dynamic pool assumption lies with the notion of available exploitable biomass. With highly mixed scale-fish fisheries, estimates of $q$ are invariably very small numbers. However, an abalone diver operating on a particular reef could take an appreciable proportion of all legal sized abalone so $q$ could easily be of the order of 0.5 or higher, meaning that a diver might be able to take 50% or more of all available legal sized abalone within a small area. Generally the fishery operates at such small scales whereas the assessment and management tends to operate at larger scales.  
 
 
 
@@ -249,7 +254,7 @@ blk <- c(13,14,16,17,20,21,22,23,24,27,28,29,31)
 pick <- which(ab1$block %in% blk)
 ab2 <- droplevels(ab1[pick,])
 splabel <- "Eastern Zone Blacklip" # with 83000 records this takes time
-labelM <- c("year","diver","take_vessel","month","ports","block")
+labelM <- c("year","diver","month","block")
 pick <- which (ab2$count > 1)
 ab3 <- makecategorical(labelM,ab2[pick,]) # only use divers >1 year
 mods <- makemodels(labelM)
@@ -274,9 +279,43 @@ After little improvement in cpue the eastern TAC was reduced in 2004 and was hel
 
 Despite the rise in cpue from 2004 to 2009, cpue dropped 25% from 92.5kg/hr to 69/8kg/hr in 2010. This was later correlated with a marine heatwave event but the reduced catches at the same cpue levels suggest that the eastern stock must also have been smaller at the same time, with consequently lower productivity, lower larval production, and presumably lowered resilience to environmental perturbations [any statement on resilience makes sense in a weight-of-evidence context but otherwise is speculation]. This conclusion is supported by the fact that following 2010 the TAC was eventually reduced to 528.5t and yet no recovery in cpue became apparent and consequently, evan relatively large declines in TAC have not yet led to significant increases in cpue.  
 
+```{r fig.width=6, fig.height=7}
+pickB <- which((ab2$block == 13) & (ab2$zone == "E"))
+ab2b <- droplevels(ab2[pickB,])
+ymax <- getmax(ab2b$catch)
+parset()
+ans <- histyear(ab2b,Lbound=2.5,Rbound=6.0,years="year",plots=c(7,4))
+```
 
+```{r fig.width=6, fig.height=7}
+ymax <- getmax(ab2b$catch)
+parset(plots=c(7,4),margin=c(0.2,0.35,0.05,0.05),outmargin=c(1.5,1.5,0,0), 
+       cex=0.7,byrow=FALSE)
+yrs <- 1992:2019
+nyr <- length(yrs)
+ymax <- getmax(ab2b$catch,mult=1.15)
+for (i in 1:nyr) {
+  pickY <- which(ab2b$year == yrs[i])
+  N <- length(pickY)
+  ab3 <- droplevels(ab2b[pickY,])
+  plot(ab3$hours,ab3$catch,type="p",pch=1,xlab="",ylab=yrs[i],
+       xlim=c(0,11),xaxs="i",ylim=c(0,ymax))
+  model <- lm(ab3$catch ~ ab3$hours)
+  abline(model,lwd=2,col=2)
+  label <- paste0(N," ",round(coef(model)[2],2)," ",
+                  round(sum(ab3$catch,na.rm=TRUE)/1000,2))
+  text(0,0.95*ymax,label,cex=0.8,pos=4)
+}
+mtext("Hours",side=1,line=0,cex=1.0,outer=TRUE)
+mtext("Catch Kg",side=2,line=0,cex=1.0,outer=TRUE)
+```
 
-
+```{r fig.width=6, fig.height=7}
+ymax <- getmax(ab2$hours)
+parset()
+ans <- histyear(ab2,Lbound=0,Rbound=10,years="year",plots=c(7,4),inc=0.5,
+                pickvar="hours",varlabel="Effort Hours",normadd=FALSE,left=FALSE)
+```
 
 # Discussion
 
@@ -287,6 +326,15 @@ The difference between availability and abundance in abalone needs more clarity.
 
 
 # References
+
+Breen, P.A. (1980). Measuring fishing intensity and annual production in the abalone
+fishery of British Columbia. _Canadian Technical Report in Fisheries and Aquatic
+Sciences_ __947__: 49 pp.
+
+Breen, P.A. (1992) A review of models used for stock assessment in abalone fisheries. p 253-275 In: Shepherd SA, Tegner MJ, Guzmán Del Próo SA (eds) _Abalone of the World: Biology, Fisheries and Culture._ Blackwell Scientific, Oxford.
+
+Fedorenko, A.Y. and P.E. Sprout (1982) Abalone Biology, Fishery Regulations, Commercial Catch (1952-1980), and Current Status of Resource in British Columbia.
+_Canadian Manuscript Report of Fisheries and Aquatic Sciences_ __No 1658__. 74pp.
 
 Haddon, M., Mayfield, S., Helidoniotis, F., Chick, R. and C. Mundy (2014) _Identification and Evaluation of Performance Indicators for Abalone Fisheries._ FRDC Final Report 2007/020. Commonwealth Scientific and Industrial Research Organisation (CSIRO), Hobart.
 
@@ -299,6 +347,12 @@ Helidoniotis, F., and M. Haddon (2013) Growth Models for Fisheries: The Effect o
 Helidoniotis, F., and M. Haddon (2014) The effectiveness of broad-scale legal minimum lengths for protecting spawning biomass of Haliotis rubra in Tasmania. _New Zealand Journal of Marine and Freshwater Research_ __48__:70–85.
 
 Miller, K.J., Maynard, B.T. and C.N. Mundy (2009) Genetic diversity and gene flow in collapsed and healthy abalone fisheries. _Molecular Ecology_ __18__:200–211.
+
+Prince, J.D. and S.A. Shepherd (1992) Australian abalone fisheries and their management. p 407-427 In: Shepherd SA, Tegner MJ, Guzmán Del Próo SA (_eds_) _Abalone of the World: Biology, Fisheries and Culture._ Blackwell Scientific, Oxford.
+
+Shepherd, S.A. and K.R. Rodda (2001) Sustainability demands vigilance: evidence for serial decline of the greenlip abalone fishery and a review of management. _Journal of Shellfish Research_ __20__(2):829-841.
+
+Sloan, N.A. and P.A. Breen (1988). Northern abalone, _Haliotis kamtschatkana_ in British Columbia: Fisheries and synopsis of life history information. _Canadian Special Publication in Fisheries and Aquatic Sciences_ __103__: 46 pp.
 
 # Supplementary Material
 
