@@ -279,6 +279,25 @@ After little improvement in cpue the eastern TAC was reduced in 2004 and was hel
 
 Despite the rise in cpue from 2004 to 2009, cpue dropped 25% from 92.5kg/hr to 69/8kg/hr in 2010. This was later correlated with a marine heatwave event but the reduced catches at the same cpue levels suggest that the eastern stock must also have been smaller at the same time, with consequently lower productivity, lower larval production, and presumably lowered resilience to environmental perturbations [any statement on resilience makes sense in a weight-of-evidence context but otherwise is speculation]. This conclusion is supported by the fact that following 2010 the TAC was eventually reduced to 528.5t and yet no recovery in cpue became apparent and consequently, evan relatively large declines in TAC have not yet led to significant increases in cpue.  
 
+
+
+```{r fig.width=6, fig.height=5}
+pickB <- which((ab2$block == 13) & (ab2$zone == "E"))
+ab2b <- droplevels(ab2[pickB,])
+ymax <- getmax(ab2b$catch)
+parset(plots=c(2,2))
+for (yr in c(2015,2016,2017,2018)) {
+  pick <- which(ab2b$year == yr)
+  plot(ab2b$hours[pick],ab2b$catch[pick],type="p",xlab="hours",ylab="catch kg)",
+       ylim=c(0,800))
+  label <- paste0(yr,"__",round(sum(ab2b$catch[pick],na.rm=TRUE)/1000,2))
+  text(0,700,label,cex=1.0,pos=4)
+}
+
+```
+
+
+
 ```{r fig.width=6, fig.height=7}
 pickB <- which((ab2$block == 13) & (ab2$zone == "E"))
 ab2b <- droplevels(ab2[pickB,])

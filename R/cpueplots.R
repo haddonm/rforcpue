@@ -228,6 +228,185 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
   text(lower+6*cebin,0.9*ymaxf,paste("StDev ",round(sdcef,3),sep=""),cex=labs,font=7)
 }  # end of diagnosticPlot
 
+#' @title examinevar tabulates and plots the properties of the input variable
+#' 
+#' @description examinevar tabulates and plots the properties of an input
+#'     variable contained within an input data.frame. This function is designed
+#'     to simplify the characterization of fisheries dependent data prior to 
+#'     conducting a statistical standardization. It does this by plotting for 
+#'     the input variable (invar), the records-by-year, the catch-by-year, and 
+#'     the effort-by-year. for each level of 'invar' it also counts the records
+#'     across years, and sums the catches and effort across years. Each of these 
+#'     are stored either as .csv or .png files 'in resdir'. It also logs these
+#'     files in resfile, which opens the possibility of displaying all results
+#'     in a local webpage under a tab labelled by the contents of 'invar'. The 
+#'     'resdir', 'resfile', and 'runname' should be the same as those used by
+#'     makehtml to prepare a directory and 'resfile' to store the files to be
+#'     used to make a local webpage of results.
+#'
+#' @param x the data.frame of fishery dependent data
+#' @param catch the name used to identify the catch factor of the species
+#' @param effort the name used to identify the effort factor of the species
+#' @param cpue the name used to identify the cpue factor of the species
+#' @param year the name used to identify the year factor of the species
+#' @param spsname the name of the species of interest.
+#' @param invar the name of the variable or factor whose properties are to be
+#'     examined
+#' @param resdir the full path of the results directory into which the plot files
+#'     and the .csv files for the tables are to be stored. 
+#' @param resfile the full path and name of the '.csv' file used to store the 
+#'     filenames, category, and caption for each plot and table. 
+#' @param runname the name of the particular run being made 
+#' @param addlines the number of lines to be added at the top of the plots, so
+#'     The year totals can be included. Default=5, the number needed will depend
+#'     on how many unique values there are for 'invar'. If there are many then 
+#'     more lines may need to be added to space out the year totals.
+#' @param wid the width of each plot, default=6
+#' @param hgt the height of each plot, default=5
+#'
+#' @return nothing but it does generate 3 plots and a table into resdir
+#' @export
+#'
+#' @examples
+#' print("wait o internal data")
+examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
+                       year="year",spsname="",
+                       resdir,resfile,runname,
+                       addlines=5,wid=6,hgt=5) { 
+  filen <- filenametopath(resdir,paste0("records_by_",invar,"_",runname,".png"))
+  records <- as.matrix(table(x[,invar],x[,year])) 
+  ymax <- max(records,na.rm=TRUE)
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  categoryplot(records,ylab=paste0("Total records by ",invar," by Year"),
+               mult=1/ymax,addtotal=TRUE,addlines=addlines)
+  caption <- paste0("The relative number of records per ",invar," for ",spsname,
+                    " by year. The numbers are year totals")
+  addplot(filen,resfile=resfile,category=invar,caption)
+  
+  filen <- filenametopath(resdir,paste0("catch_by_",invar,"_",runname,".png"))
+  catchV <- tapply(x[,catch],list(x[,invar],x[,year]),sum,na.rm=TRUE)/1000
+  ymax <- getmax(catchV)
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  categoryplot(catchV,ylab=paste0("Total catch by ",invar," by Year"),
+               mult=1/ymax,addtotal=TRUE,addlines=addlines)
+  caption <- paste0("The relative ",catch," per ",invar," for ",spsname,
+                    " by year. The numbers are year totals.")
+  addplot(filen,resfile=resfile,category=invar,caption)
+  
+  filen <- filenametopath(resdir,paste0(effort,"_by_",invar,"_",runname,".png"))
+  effortV <- tapply(x[,effort],list(x[,invar],x[,year]),sum,na.rm=TRUE)/1000
+  ymax <- getmax(effortV)
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  categoryplot(effortV,ylab=paste0("Total ",effort," by ",invar," by Year"),
+               mult=1/ymax,addtotal=TRUE,addlines=addlines)
+  caption <- paste0("The relative ",effort," per ",invar," for ",spsname,
+                    " by year. The numbers are year totals.")
+  addplot(filen,resfile=resfile,category=invar,caption)
+  
+  recs <- apply(records,1,countgtzero)
+  catV <- apply(catchV,1,sum,na.rm=TRUE)
+  effV <- apply(effortV,1,sum,na.rm=TRUE)
+  ans <- cbind("records"=recs,"catch"=catV,"effort"=effV)
+  ans <- ans[order(ans[,"catch"]),]
+  filen <- filenametopath(resdir,paste0("summary_for_",invar,"_",runname,".csv"))
+  if (nrow(ans) > 16) large=TRUE else large=FALSE
+  addtable(ans,filen,resfile,category=invar,
+           caption=paste0("Annual summary for ",spsname," across ",invar,"."),
+           big=large)
+} # end of examinevar
+
+
+#' @title examinedata plots the yearly distributions of catch and effort from 'x'
+#' 
+#' @description examinedata plots the yearly distributions of the number of 
+#'     records, the catch, the effort, and the geometric mean cpue by year for 
+#'     the data in the fishery dependent data in the data.frame x. It also 
+#'     tabulates these values.  Each of these are stored either as .csv or .png 
+#'     files 'in resdir'. It also logs these files in resfile, which opens the 
+#'     possibility of displaying all results in a local webpage under a tab 
+#'     labelled 'yeardata'. The 'resdir', 'resfile', and 'runname' should be the 
+#'     same as those used by makehtml to prepare a directory and 'resfile' to 
+#'     store the files to be used to make a local webpage of results. 
+#'
+#' @param x  the data.frame of fishery dependent data
+#' @param catch the name used to identify the catch factor of the species
+#' @param labcatch the axis label for catch
+#' @param effort the name used to identify the effort factor of the species
+#' @param labeffort the axis label for effort
+#' @param cpue the name used to identify the cpue factor of the species
+#' @param labcpue the axis label for cpue
+#' @param year the name used to identify the year factor of the species
+#' @param spsname the name of the species of interest.
+#' @param resdir the full path of the results directory into which the plot files
+#'     and the .csv files for the tables are to be stored. 
+#' @param resfile the full path and name of the '.csv' file used to store the 
+#'     filenames, category, and caption for each plot and table. 
+#' @param runname the name of the particular run being made 
+#' @param plotnum the number of rows an columns of plots used, default=c(1,1)
+#' @param wid the width of each plot, default=6
+#' @param hgt the height of each plot, default=5
+#' 
+#' @return nothing but it does add 4 plots and a table to the results
+#' @export
+#'
+#' @examples
+#' print("wait o internal data")
+examinedata <- function(x,
+                        catch="catch",labcatch="catch",
+                        effort="hours",labeffort="effort",
+                        cpue="cpue",labcpue="cpue",
+                        year="year",spsname="",
+                        resdir="",resfile="",runname="",
+                        plotnum=c(1,1),wid=6,hgt=5) { 
+  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";fisher="licence";loc="grid"
+  records <- as.numeric(table(x[,year]))
+  cby <- tapply(x[,catch],x[,year],sum,na.rm=TRUE)/1000
+  eby <- tapply(x[,effort],x[,year],sum,na.rm=TRUE)
+  geoby <-  tapply(x[,cpue],x[,year],geomean)
+  annsum <- cbind(records=records,catch=cby,effort=eby,geomet=geoby)
+  
+  filen <- filenametopath(resdir,paste0("catch_by_year_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  ans <- histyear(x,Lbound=0,Rbound=100,inc=5,years="year",plots=plotnum,
+                  pickvar=catch,varlabel=labcatch,left=FALSE)
+  caption <- paste0("Distribution of positive catches for ",spsname," by year.")
+  addplot(filen,resfile=resfile,category="yeardata",caption)
+  
+  filen <- filenametopath(resdir,paste0(effort,"_by_year_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  ans <- histyear(x,Lbound=0,Rbound=300,inc=15,years="year",plots=plotnum,
+                  pickvar=effort,varlabel=labeffort,
+                  normadd=FALSE,left=FALSE)
+  caption <- paste0("Distribution of effort levels for ",spsname," by year.")
+  addplot(filen,resfile=resfile,category="yeardata",caption)
+  
+  filen <- filenametopath(resdir,paste0("catch_by_Effort_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  xyplotyear(x,yvar=catch,xvar=effort,year=year,plotnum=plotnum,
+             xlim=c(0,300),addline=TRUE,xlab=labeffort,ylab=labcatch)
+  caption <- paste0("Distribution of catch vs effort for ",spsname," by year. ",
+                    "Lines are linear regressions through each year's data-set.")
+  addplot(filen,resfile=resfile,category="yeardata",caption)
+  
+  yrs <- as.numeric(rownames(annsum))
+  filen <- filenametopath(resdir,paste0("year_summary_",runname,".png"))
+  label <- colnames(annsum)
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  parset(plots=c(2,2))
+  for (i in 1:4) {
+    ymax <- getmax(annsum[,i])
+    plot(yrs,annsum[,i],type="l",lwd=2,ylim=c(0,ymax),yaxs="i",ylab=label[i],
+         xlab="",panel.first=grid())
+  }
+  caption <- paste0("Plots of records, catch, effort, and geometric mean cpue ",
+                    "by year for ",spsname,".")
+  addplot(filen,resfile=resfile,category="yeardata",caption)
+  
+  filen <- filenametopath(resdir,paste0("year_summary_",runname,".csv"))
+  addtable(annsum,filen,resfile,category="yeardata",
+           caption="Annual summary for scallop Hammerhead sharks.")
+} # end of examinedata
+
 #' @title histyear plots a histogram of a given variable for each year available
 #'
 #' @description histyear plots a histogram of a given variable for each year
