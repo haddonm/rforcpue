@@ -19,7 +19,8 @@ examinedata(
   runname = "",
   plotnum = c(1, 1),
   wid = 6,
-  hgt = 5
+  hgt = 5,
+  limitx = matrix(rep(NA, 6), nrow = 3, ncol = 2)
 )
 }
 \arguments{
@@ -54,9 +55,12 @@ filenames, category, and caption for each plot and table.}
 \item{wid}{the width of each plot, default=6}
 
 \item{hgt}{the height of each plot, default=5}
+
+\item{limitx}{a matrix of 3 x 2 containing the xlim values for the first 
+three graphs. Default is a 3 x 2 matrix of NA}
 }
 \value{
-nothing but it does add 4 plots and a table to the results
+nothing but it does add 4 plots and two tables to the results
 }
 \description{
 examinedata plots the yearly distributions of the number of 
