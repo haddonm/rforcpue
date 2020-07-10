@@ -12,6 +12,8 @@ examinedata(
   labeffort = "effort",
   cpue = "cpue",
   labcpue = "cpue",
+  LnCE = "LnCE",
+  labLcpue = "log(cpue)",
   year = "year",
   spsname = "",
   resdir = "",
@@ -19,7 +21,8 @@ examinedata(
   runname = "",
   plotnum = c(1, 1),
   wid = 6,
-  hgt = 5
+  hgt = 5,
+  limitx = matrix(rep(NA, 12), nrow = 4, ncol = 3)
 )
 }
 \arguments{
@@ -36,6 +39,10 @@ examinedata(
 \item{cpue}{the name used to identify the cpue factor of the species}
 
 \item{labcpue}{the axis label for cpue}
+
+\item{LnCE}{column name of log(cpue) in x, default='LnCE'}
+
+\item{labLcpue}{the axis label for log(cpue)}
 
 \item{year}{the name used to identify the year factor of the species}
 
@@ -54,9 +61,13 @@ filenames, category, and caption for each plot and table.}
 \item{wid}{the width of each plot, default=6}
 
 \item{hgt}{the height of each plot, default=5}
+
+\item{limitx}{a matrix of 4 x 3 containing the xlim values, Lbound, Rbound, 
+and inc, for four of the plots. Default is a 4 x 3matrix of NA. For the 
+third plot no inc value is required so set it to zero (it will be ignored)}
 }
 \value{
-nothing but it does add 4 plots and a table to the results
+nothing but it does add 4 plots and two tables to the results
 }
 \description{
 examinedata plots the yearly distributions of the number of 
@@ -70,5 +81,5 @@ examinedata plots the yearly distributions of the number of
     store the files to be used to make a local webpage of results.
 }
 \examples{
-print("wait o internal data")
+print("wait on internal data")
 }

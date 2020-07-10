@@ -13,7 +13,8 @@ xyplotyear(
   xlim = c(0, 12),
   addline = TRUE,
   xlab = "",
-  ylab = ""
+  ylab = "",
+  maxy = NA
 )
 }
 \arguments{
@@ -38,6 +39,9 @@ xvar name will be used}
 
 \item{ylab}{the generic label for the y-axis, default='', if left empty the 
 yvar name will be used}
+
+\item{maxy}{is available if you wish to vary the maximum y-axis value. The 
+default=NA, which means it will use getmax x 1.15 to find a maximum}
 }
 \value{
 currently nothing but it does plot a graph

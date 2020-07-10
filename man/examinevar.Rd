@@ -54,7 +54,7 @@ more lines may need to be added to space out the year totals.}
 \item{hgt}{the height of each plot, default=5}
 }
 \value{
-nothing but it does generate 3 plots and a table into resdir
+nothing but it does generate 4 plots and 2 tables into resdir
 }
 \description{
 examinevar tabulates and plots the properties of an input
@@ -72,5 +72,5 @@ examinevar tabulates and plots the properties of an input
     used to make a local webpage of results.
 }
 \examples{
-print("wait o internal data")
+print("wait on internal data")
 }

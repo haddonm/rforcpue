@@ -6,11 +6,10 @@
 \usage{
 histyear(
   x,
-  Lbound = -3.5,
-  Rbound = 12.25,
+  xlimit = c(NA, NA),
   inc = 0.25,
   pickvar = "LnCE",
-  years = "Year",
+  years = "year",
   varlabel = "log(CPUE)",
   vline = NA,
   plots = c(3, 3),
@@ -21,15 +20,13 @@ histyear(
 \arguments{
 \item{x}{the data.frame of data with at least a 'Year' and pickvar present}
 
-\item{Lbound}{leftbound on all histograms, defaults to -3.5}
-
-\item{Rbound}{right bound on all histograms, defaults to 12.25}
+\item{xlimit}{the xaxis bounds for all histograms, defaults to c(-3,12)}
 
 \item{inc}{the class width of the histogram, defaults to 0.25}
 
 \item{pickvar}{which variable to plot each year default = 'LnCE'}
 
-\item{years}{which variable name identifies the yaer column, default='Year'}
+\item{years}{which variable name identifies the yaer column, default='year'}
 
 \item{varlabel}{what label to use on x-axis, default = 'log(CPUE)'}
 
