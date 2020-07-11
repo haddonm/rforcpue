@@ -29,7 +29,8 @@ xyplotyear(
 \item{plotnum}{a vector of rows and cols for the plots, default=c(1,1). This
 assumes that the columns are filled first using mfcol}
 
-\item{xlim}{the range of the xvar to be plotted, default=c(0,12)}
+\item{xlim}{the range of the xvar to be plotted, default=c(0,12); If c(NA,NA)
+the xlim is set to the range of the input xvar}
 
 \item{addline}{should a linear regression be fitted and added to each plot
 default=TRUE}

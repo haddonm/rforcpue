@@ -22,7 +22,7 @@ examinedata(
   plotnum = c(1, 1),
   wid = 6,
   hgt = 5,
-  limitx = matrix(rep(NA, 12), nrow = 4, ncol = 3)
+  xlimit = rep(NA, 12)
 )
 }
 \arguments{
@@ -62,8 +62,8 @@ filenames, category, and caption for each plot and table.}
 
 \item{hgt}{the height of each plot, default=5}
 
-\item{limitx}{a matrix of 4 x 3 containing the xlim values, Lbound, Rbound, 
-and inc, for four of the plots. Default is a 4 x 3matrix of NA. For the 
+\item{xlimit}{a veector of 12 containing the xlim values, Lbound, Rbound, 
+and inc, for four of the plots. Default is rep(NA,12). For the 
 third plot no inc value is required so set it to zero (it will be ignored)}
 }
 \value{

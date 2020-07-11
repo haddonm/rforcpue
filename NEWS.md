@@ -11,3 +11,5 @@
 * 03-07-2020 0.0.0.1750 Added categoryplot and other utility functions
 
 * 09-07-202 0.0.0.1700 added examinedata and examinevar to facilitate the examination and characterization of fishery independent data. This is aimed at simplifying data selection prior to standardization.
+
+* 11-07-2020 0.0.0.1650 Continued development of examinevar and examinedata, which involved changes to histyear.

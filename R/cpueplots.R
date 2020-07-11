@@ -312,14 +312,14 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
   categoryplot(ceyr,mult=1/ymax,ylab=paste0("Geometric Mean CPUE by ",invar))
   caption <- paste0("Geometric Mean CPUE by ",invar," for ",spsname," by year.")
   addplot(filen,resfile=resfile,category=invar,caption)
-
+  
   yrsact <- apply(records,1,countgtzero)
   recs <- apply(records,1,sum,na.rm=TRUE) 
   catV <- apply(catchV,1,sum,na.rm=TRUE)
   effV <- apply(effortV,1,sum,na.rm=TRUE)
   ans <- cbind("records"=recs,"catch"=catV,"effort"=effV,"yrsActive"=yrsact)
-  ans <- ans[order(ans[,"catch"]),]
-  
+  ans <- ans[order(ans[,"catch"]),]  
+
   filen <-  filenametopath(resdir,paste0("geometric_CPUE_by_",invar,"_",runname,".csv"))
   if (nrow(ceyr) > 20) large=TRUE else large=FALSE
   addtable(round(ceyr,5),filen,resfile,category=invar,
@@ -364,8 +364,8 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
 #' @param plotnum the number of rows an columns of plots used, default=c(1,1)
 #' @param wid the width of each plot, default=6
 #' @param hgt the height of each plot, default=5
-#' @param limitx a matrix of 4 x 3 containing the xlim values, Lbound, Rbound, 
-#'     and inc, for four of the plots. Default is a 4 x 3matrix of NA. For the 
+#' @param xlimit a veector of 12 containing the xlim values, Lbound, Rbound, 
+#'     and inc, for four of the plots. Default is rep(NA,12). For the 
 #'     third plot no inc value is required so set it to zero (it will be ignored)
 #' 
 #' @return nothing but it does add 4 plots and two tables to the results
@@ -381,8 +381,11 @@ examinedata <- function(x,
                         year="year",spsname="",
                         resdir="",resfile="",runname="",
                         plotnum=c(1,1),wid=6,hgt=5,
-                        limitx=matrix(rep(NA,12),nrow=4,ncol=3)) { 
-  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";invar="licence";loc="grid"
+                        xlimit=rep(NA,12)) { 
+  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";
+  # spsname="scalloped hammerhead";resdir=resdir; resfile=resfile; runname=runname;
+  # plotnum=c(5,4);wid=6; hgt=5; xlim=rep(NA,12)
+  limitx <- matrix(xlimit,nrow=4,ncol=3,byrow=TRUE)
   records <- as.numeric(table(x[,year]))
   cby <- tapply(x[,catch],x[,year],sum,na.rm=TRUE)/1000
   eby <- tapply(x[,effort],x[,year],sum,na.rm=TRUE)
@@ -391,14 +394,14 @@ examinedata <- function(x,
   
   filen <- filenametopath(resdir,paste0("catch_by_year_",runname,".png"))
   plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x,xlimit=limitx[1,1:2],inc=limitx[1,3],years="year",
-                  plots=plotnum,pickvar=catch,varlabel=labcatch,left=FALSE)
+  ans <- histyear(x,xlimit=limitx[1,],years="year", plots=plotnum,
+                 pickvar=catch,varlabel=labcatch,normadd=FALSE,left=FALSE)
   caption <- paste0("Distribution of positive catches for ",spsname," by year.")
   addplot(filen,resfile=resfile,category="yeardata",caption)
   
   filen <- filenametopath(resdir,paste0(effort,"_by_year_",runname,".png"))
   plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x,xlimit=limitx[2,1:2],inc=limitx[2,3],years="year",plots=plotnum,
+  ans <- histyear(x,xlimit=limitx[2,],years="year",plots=plotnum,
                   pickvar=effort,varlabel=labeffort,
                   normadd=FALSE,left=FALSE)
   caption <- paste0("Distribution of effort levels for ",spsname," by year.")
@@ -415,7 +418,7 @@ examinedata <- function(x,
   pickCE <- which((x[,catch] > 0) & (x[,effort] > 0))
   filen <- filenametopath(resdir,paste0("annual_geometric_mean_CPUE_",runname,".png"))
   plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x[pickCE,],xlimit=limitx[4,1:2],inc=limitx[4,3],years="year",plots=plotnum,
+  ans <- histyear(x[pickCE,],xlimit=limitx[4,],years="year",plots=plotnum,
                   pickvar=LnCE,varlabel=labLcpue,left=FALSE)
   caption <- paste0("Annual Geometric Mean CPUE for ",spsname," by year.")
   addplot(filen,resfile=resfile,category="yeardata",caption)
@@ -437,7 +440,7 @@ examinedata <- function(x,
   filen <- filenametopath(resdir,paste0("year_summary_",runname,".csv"))
   addtable(annsum,filen,resfile,category="yeardata",
            caption="Annual summary for scallop Hammerhead sharks.")
-} # end of examinedata
+  } # end of examinedata
 
 #' @title histyear plots a histogram of a given variable for each year available
 #'
@@ -445,14 +448,16 @@ examinedata <- function(x,
 #'     available
 #'
 #' @param x the data.frame of data with at least a 'Year' and pickvar present
-#' @param xlimit the xaxis bounds for all histograms, defaults to c(-3,12)
-#' @param inc  the class width of the histogram, defaults to 0.25
-#' @param pickvar which variable to plot each year default = 'LnCE'
+#' @param xlimit the xaxis bounds for all histograms, defaults to c(NA,NA,NA),
+#'     the values would be as used in seq(xlimit[1],xlimit[2],xlimit[3]). If the
+#'     default is used then the 0 and 0.98 quantiles of the variable are used as
+#'     the bounds with 25 bins
+#' @param pickvar which variable to plot each year default = 'cpue'
 #' @param years which variable name identifies the yaer column, default='year'
-#' @param varlabel what label to use on x-axis, default = 'log(CPUE)'
+#' @param varlabel what label to use on x-axis, default = 'CPUE'
 #' @param vline an optional vertical line to aid interpretation. If it is
 #'     numeric it will be added to each plot
-#' @param plots how many plots to generate, default = c(3,3)
+#' @param plots how many plots to generate, default = c(5,5)
 #' @param normadd should a normal distribution be added to each plot. 
 #'     default=TRUE
 #' @param left on which side of each plot should the year and number of records 
@@ -466,10 +471,12 @@ examinedata <- function(x,
 #' @examples
 #' \dontrun{
 #' print("still to be developed")
+#' # pickvar="x100nethr";years="year";varlabel="log(CPUE)";vline=NA;plots=plotnum;
+#' # normadd=TRUE;left=FALSE;xlimit=c(0,250,10)
 #' }
-histyear <- function(x,xlimit=c(NA,NA),inc=0.25,
-                     pickvar="LnCE",years="year",varlabel="log(CPUE)",
-                     vline=NA,plots=c(3,3),normadd=TRUE,left=TRUE) {
+histyear <- function(x,xlimit=c(NA,NA,NA),
+                     pickvar="cpue",years="year",varlabel="CPUE",
+                     vline=NA,plots=c(5,5),normadd=TRUE,left=TRUE) {
   yrs <- sort(unique(x[,years]))
   nyr <- length(yrs)
   columns <- c("Year","maxcount","Mean","StDev","N","Min","Max")
@@ -478,13 +485,12 @@ histyear <- function(x,xlimit=c(NA,NA),inc=0.25,
   par(cex=0.75, mgp=c(1.35,0.35,0), font.axis=7,font=7,font.lab=7)
   if (left) adj=0 else adj=1
   if (is.na(xlimit[1])) {
-    bins <- 30
-  } else {
-    bins <- seq(xlimit[1],xlimit[2],inc) 
-    pickX <- which((x[,pickvar] >= xlimit[1]) &
+    xlimit[1:2] <- quantile(x[,pickvar],probs=c(0,0.99))
+    bins <- seq(xlimit[1],xlimit[2],length=25)
+  } else { bins <- seq(xlimit[1],xlimit[2],xlimit[3]) }
+  pickX <- which((x[,pickvar] >= xlimit[1]) &
                    (x[,pickvar] <= xlimit[2]))
-    x2 <- droplevels(x[pickX,])
-  }
+  x2 <- droplevels(x[pickX,])
   for (yr in 1:nyr) {
     pick <- which(x2[,years] == yrs[yr])
     outh <- hist(x2[pick,pickvar],breaks=bins,col=2,main="",xlab="",ylab="")
@@ -1113,7 +1119,8 @@ qqdiag <- function(inmodel,plotrug=FALSE,bins=NA,hline=0.0,
 #' @param year the name of the year variable, default="year"
 #' @param plotnum a vector of rows and cols for the plots, default=c(1,1). This
 #'     assumes that the columns are filled first using mfcol
-#' @param xlim the range of the xvar to be plotted, default=c(0,12)
+#' @param xlim the range of the xvar to be plotted, default=c(0,12); If c(NA,NA)
+#'     the xlim is set to the range of the input xvar
 #' @param addline should a linear regression be fitted and added to each plot
 #'     default=TRUE
 #' @param xlab the  generic label for the x-axis, default='', if left empty the 
@@ -1139,18 +1146,19 @@ xyplotyear <- function(x,yvar="",xvar="",year="year",plotnum=c(1,1),
          cex=0.7,byrow=FALSE)
   yrs <- sort(unique(x[,year]))
   nyr <- length(yrs)
+  if (is.na(xlim[1])) xlim <- range(x[,xvar])
   for (i in 1:nyr) {
     pickY <- which(x[,year] == yrs[i])
     N <- length(pickY)
-    ab3 <- droplevels(x[pickY,])
-    plot(ab3[,xvar],ab3[,yvar],type="p",pch=1,xlab="",ylab=yrs[i],
-         xlim=xlim,xaxs="i",ylim=c(0,ymax))
-    label <- paste0(N," ",round(sum(ab3[,yvar],na.rm=TRUE)/1000,2))
+    x2 <- droplevels(x[pickY,])
+    plot(x2[,xvar],x2[,yvar],type="p",pch=1,xlab="",ylab=yrs[i],
+         xlim=xlim,ylim=c(0,ymax))
+    label <- paste0(N," ",round(sum(x2[,yvar],na.rm=TRUE)/1000,2))
     if (addline) {
-      model <- lm(ab3[,yvar] ~ ab3[,xvar])
+      model <- lm(x2[,yvar] ~ x2[,xvar])
       abline(model,lwd=2,col=2)
       label <- paste0(N," _ ",round(coef(model)[2],2)," _ ",
-                      round(sum(ab3[,yvar],na.rm=TRUE)/1000,2))
+                      round(sum(x2[,yvar],na.rm=TRUE)/1000,2))
     }
     text(0,0.95*ymax,label,cex=0.8,pos=4)
   }
