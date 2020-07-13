@@ -31,9 +31,10 @@ the diagram. default=FALSE. If TRUE it prints the column totals
 sequentially addlines-2 lines and then addlines-1 lines above the circles}
 
 \item{addlines}{if addtotal is TRUE then a number of lines are added at the 
-top of the plot. This argument determines the number of extra lines. 
-default=3, but if only a few then a smaller number would be more 
-appropriate. If addtotal = FALSE, then addlines is ignored}
+top of the plot to contain the column totals. This argument determines 
+the number of extra lines. default=3, but if only a few then a smaller 
+number would be more appropriate. If addtotal = FALSE, then addlines is 
+ignored}
 }
 \value{
 nothing but it does generate a plot

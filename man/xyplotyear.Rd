@@ -12,6 +12,7 @@ xyplotyear(
   plotnum = c(1, 1),
   xlim = c(0, 12),
   addline = TRUE,
+  origin = FALSE,
   xlab = "",
   ylab = "",
   maxy = NA
@@ -34,6 +35,8 @@ the xlim is set to the range of the input xvar}
 
 \item{addline}{should a linear regression be fitted and added to each plot
 default=TRUE}
+
+\item{origin}{should the regression pass through the origin, default=FALSE}
 
 \item{xlab}{the  generic label for the x-axis, default='', if left empty the 
 xvar name will be used}

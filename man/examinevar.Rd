@@ -17,7 +17,8 @@ examinevar(
   runname,
   addlines = 5,
   wid = 6,
-  hgt = 5
+  hgt = 5,
+  category = invar
 )
 }
 \arguments{
@@ -52,6 +53,8 @@ more lines may need to be added to space out the year totals.}
 \item{wid}{the width of each plot, default=6}
 
 \item{hgt}{the height of each plot, default=5}
+
+\item{category}{default = invar, but can be changed if required}
 }
 \value{
 nothing but it does generate 4 plots and 2 tables into resdir

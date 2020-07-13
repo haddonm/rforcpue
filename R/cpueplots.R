@@ -88,9 +88,10 @@ addnorm <- function(inhist,xdata,inc=0.01) {
 #'     the diagram. default=FALSE. If TRUE it prints the column totals 
 #'     sequentially addlines-2 lines and then addlines-1 lines above the circles
 #' @param addlines if addtotal is TRUE then a number of lines are added at the 
-#'     top of the plot. This argument determines the number of extra lines. 
-#'     default=3, but if only a few then a smaller number would be more 
-#'     appropriate. If addtotal = FALSE, then addlines is ignored
+#'     top of the plot to contain the column totals. This argument determines 
+#'     the number of extra lines. default=3, but if only a few then a smaller 
+#'     number would be more appropriate. If addtotal = FALSE, then addlines is 
+#'     ignored
 #'
 #' @return nothing but it does generate a plot
 #' @export
@@ -125,11 +126,12 @@ categoryplot <- function(x,xlab="",ylab="",mult=0.1,gridx=FALSE,addtotal=FALSE,
     symbols(rep(xlabel[i],ny),1:ny,circles=(mult*x[,i]),inches=FALSE,add=TRUE,
             bg=rgb(1, 0, 0, 0.5), fg = "black")
   if (addtotal) {
-    incstep <- addlines - 2
+    incstep <- trunc(addlines/2)
+    if (incstep > 2) incstep <- incstep - 1 
     for (yr in 1:nx) {
        oddeven <- yr %% 2
        if (oddeven == 0) text(years[yr],(ny+incstep),round(yrtot[yr],1))
-         else  text(years[yr],(ny+incstep+1),round(yrtot[yr],1))
+         else  text(years[yr],(ny+incstep*2),round(yrtot[yr],1))
     }
   }
   return(invisible(list(yrtotal=yrtot,yrcount=countyr)))
@@ -229,6 +231,118 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
   text(lower+6*cebin,0.9*ymaxf,paste("StDev ",round(sdcef,3),sep=""),cex=labs,font=7)
 }  # end of diagnosticPlot
 
+#' @title examinedata plots the yearly distributions of catch and effort from 'x'
+#' 
+#' @description examinedata plots the yearly distributions of the number of 
+#'     records, the catch, the effort, and the geometric mean cpue by year for 
+#'     the data in the fishery dependent data in the data.frame x. It also 
+#'     tabulates these values.  Each of these are stored either as .csv or .png 
+#'     files 'in resdir'. It also logs these files in resfile, which opens the 
+#'     possibility of displaying all results in a local webpage under a tab 
+#'     labelled 'yeardata'. The 'resdir', 'resfile', and 'runname' should be the 
+#'     same as those used by makehtml to prepare a directory and 'resfile' to 
+#'     store the files to be used to make a local webpage of results. 
+#'
+#' @param x  the data.frame of fishery dependent data
+#' @param catch the name used to identify the catch factor of the species
+#' @param labcatch the axis label for catch
+#' @param effort the name used to identify the effort factor of the species
+#' @param labeffort the axis label for effort
+#' @param cpue the name used to identify the cpue factor of the species
+#' @param labcpue the axis label for cpue
+#' @param LnCE column name of log(cpue) in x, default='LnCE'
+#' @param labLcpue the axis label for log(cpue)
+#' @param year the name used to identify the year factor of the species
+#' @param spsname the name of the species of interest.
+#' @param resdir the full path of the results directory into which the plot files
+#'     and the .csv files for the tables are to be stored. 
+#' @param resfile the full path and name of the '.csv' file used to store the 
+#'     filenames, category, and caption for each plot and table. 
+#' @param runname the name of the particular run being made 
+#' @param plotnum the number of rows an columns of plots used, default=c(1,1)
+#' @param wid the width of each plot, default=6
+#' @param hgt the height of each plot, default=5
+#' @param xlimit a veector of 12 containing the xlim values, Lbound, Rbound, 
+#'     and inc, for four of the plots. Default is rep(NA,12). For the 
+#'     third plot no inc value is required so set it to zero (it will be ignored)
+#' @param category default='yeardata' but in case this is called for a subset
+#'     of data then it can be set to whatever you wish
+#' 
+#' @return nothing but it does add 4 plots and two tables to the results
+#' @export
+#'
+#' @examples
+#' print("wait on internal data")
+examinedata <- function(x,
+                        catch="catch",labcatch="catch",
+                        effort="hours",labeffort="effort",
+                        cpue="cpue",labcpue="cpue",
+                        LnCE="LnCE",labLcpue="log(cpue)",
+                        year="year",spsname="",
+                        resdir="",resfile="",runname="",
+                        plotnum=c(1,1),wid=6,hgt=5,
+                        xlimit=rep(NA,12),
+                        category="yeardata") { 
+  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";
+  # spsname="scalloped hammerhead";resdir=resdir; resfile=resfile; runname=runname;
+  # plotnum=c(5,4);wid=6; hgt=5; xlim=rep(NA,12)
+  limitx <- matrix(xlimit,nrow=4,ncol=3,byrow=TRUE)
+  records <- as.numeric(table(x[,year]))
+  cby <- tapply(x[,catch],x[,year],sum,na.rm=TRUE)/1000
+  eby <- tapply(x[,effort],x[,year],sum,na.rm=TRUE)
+  geoby <-  tapply(x[,cpue],x[,year],geomean)
+  annsum <- cbind(records=records,catch=cby,effort=eby,geomet=geoby)
+  
+  filen <- filenametopath(resdir,paste0("catch_by_year_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  ans <- histyear(x,xlimit=limitx[1,],years="year", plots=plotnum,
+                 pickvar=catch,varlabel=labcatch,normadd=FALSE,left=FALSE)
+  caption <- paste0("Distribution of positive catches for ",spsname," by year.")
+  addplot(filen,resfile=resfile,category=category,caption)
+  
+  filen <- filenametopath(resdir,paste0(effort,"_by_year_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  ans <- histyear(x,xlimit=limitx[2,],years="year",plots=plotnum,
+                  pickvar=effort,varlabel=labeffort,
+                  normadd=FALSE,left=FALSE)
+  caption <- paste0("Distribution of effort levels for ",spsname," by year.")
+  addplot(filen,resfile=resfile,category=category,caption)
+  
+  filen <- filenametopath(resdir,paste0("catch_by_effort_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  xyplotyear(x,yvar=catch,xvar=effort,year=year,plotnum=plotnum,xlim=limitx[3,1:2],
+             addline=TRUE,origin=TRUE,xlab=labeffort,ylab=labcatch)
+  caption <- paste0("Distribution of catch vs effort for ",spsname," by year. ",
+                    "Lines are linear regressions through each year's data-set.")
+  addplot(filen,resfile=resfile,category=category,caption)
+  
+  pickCE <- which((x[,catch] > 0) & (x[,effort] > 0))
+  filen <- filenametopath(resdir,paste0("annual_geometric_mean_CPUE_",runname,".png"))
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  ans <- histyear(x[pickCE,],xlimit=limitx[4,],years="year",plots=plotnum,
+                  pickvar=LnCE,varlabel=labLcpue,left=FALSE)
+  caption <- paste0("Annual Geometric Mean CPUE for ",spsname," by year.")
+  addplot(filen,resfile=resfile,category=category,caption)
+  
+  yrs <- as.numeric(rownames(annsum))
+  filen <- filenametopath(resdir,paste0("year_summary_",runname,".png"))
+  label <- colnames(annsum)
+  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
+  parset(plots=c(2,2))
+  for (i in 1:4) {
+    ymax <- getmax(annsum[,i])
+    plot(yrs,annsum[,i],type="l",lwd=2,ylim=c(0,ymax),yaxs="i",ylab=label[i],
+         xlab="",panel.first=grid())
+  }
+  caption <- paste0("Plots of records, catch, effort, and geometric mean cpue ",
+                    "by year for ",spsname,".")
+  addplot(filen,resfile=resfile,category=category,caption)
+
+  filen <- filenametopath(resdir,paste0("year_summary_",runname,".csv"))
+  addtable(annsum,filen,resfile,category=category,
+           caption="Annual summary for scallop Hammerhead sharks.")
+  } # end of examinedata
+
 #' @title examinevar tabulates and plots the properties of the input variable
 #' 
 #' @description examinevar tabulates and plots the properties of an input
@@ -264,6 +378,7 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
 #'     more lines may need to be added to space out the year totals.
 #' @param wid the width of each plot, default=6
 #' @param hgt the height of each plot, default=5
+#' @param category default = invar, but can be changed if required
 #'
 #' @return nothing but it does generate 4 plots and 2 tables into resdir
 #' @export
@@ -273,16 +388,17 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
 examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
                        year="year",spsname="",
                        resdir,resfile,runname,
-                       addlines=5,wid=6,hgt=5) { 
+                       addlines=5,wid=6,hgt=5,
+                       category=invar) { 
   filen <- filenametopath(resdir,paste0("records_by_",invar,"_",runname,".png"))
   records <- as.matrix(table(x[,invar],x[,year])) 
   ymax <- max(records,na.rm=TRUE)
   plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
   categoryplot(records,ylab=paste0("Total records by ",invar," by Year"),
                mult=1/ymax,addtotal=TRUE,addlines=addlines)
-  caption <- paste0("The relative number of records per ",invar," for ",spsname,
+  caption <- paste0("The relative number of records per ",category," for ",spsname,
                     " by year. The numbers are year totals")
-  addplot(filen,resfile=resfile,category=invar,caption)
+  addplot(filen,resfile=resfile,category=category,caption)
   
   filen <- filenametopath(resdir,paste0("catch_by_",invar,"_",runname,".png"))
   catchV <- tapply(x[,catch],list(x[,invar],x[,year]),sum,na.rm=TRUE)/1000
@@ -292,7 +408,7 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
                mult=1/ymax,addtotal=TRUE,addlines=addlines)
   caption <- paste0("The relative ",catch," per ",invar," for ",spsname,
                     " by year. The numbers are year totals.")
-  addplot(filen,resfile=resfile,category=invar,caption)
+  addplot(filen,resfile=resfile,category=category,caption)
   
   filen <- filenametopath(resdir,paste0(effort,"_by_",invar,"_",runname,".png"))
   effortV <- tapply(x[,effort],list(x[,invar],x[,year]),sum,na.rm=TRUE)/1000
@@ -302,7 +418,7 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
                mult=1/ymax,addtotal=TRUE,addlines=addlines)
   caption <- paste0("The relative ",effort," per ",invar," for ",spsname,
                     " by year. The numbers are year totals.")
-  addplot(filen,resfile=resfile,category=invar,caption)
+  addplot(filen,resfile=resfile,category=category,caption)
   
   pick <- which((x[,catch] > 0) & (x[,effort] > 0))
   ceyr <- tapply(x[pick,cpue],list(x[pick,invar],x[pick,year]),geomean)
@@ -311,7 +427,7 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
   plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
   categoryplot(ceyr,mult=1/ymax,ylab=paste0("Geometric Mean CPUE by ",invar))
   caption <- paste0("Geometric Mean CPUE by ",invar," for ",spsname," by year.")
-  addplot(filen,resfile=resfile,category=invar,caption)
+  addplot(filen,resfile=resfile,category=category,caption)
   
   yrsact <- apply(records,1,countgtzero)
   recs <- apply(records,1,sum,na.rm=TRUE) 
@@ -319,128 +435,20 @@ examinevar <- function(x,invar="",catch="catch",effort="hours",cpue="cpue",
   effV <- apply(effortV,1,sum,na.rm=TRUE)
   ans <- cbind("records"=recs,"catch"=catV,"effort"=effV,"yrsActive"=yrsact)
   ans <- ans[order(ans[,"catch"]),]  
-
+  
   filen <-  filenametopath(resdir,paste0("geometric_CPUE_by_",invar,"_",runname,".csv"))
   if (nrow(ceyr) > 20) large=TRUE else large=FALSE
-  addtable(round(ceyr,5),filen,resfile,category=invar,
+  addtable(round(ceyr,5),filen,resfile,category=category,
            caption=paste0("Geometric Mean CPUE by ",invar," for ",spsname,
                           " by year."),big=large)  
-
+  
   filen <- filenametopath(resdir,paste0("summary_for_",invar,"_",runname,".csv"))
   if (nrow(ans) > 20) large=TRUE else large=FALSE
-  addtable(ans,filen,resfile,category=invar,
+  addtable(ans,filen,resfile,category=category,
            caption=paste0("Annual summary for ",spsname," across ",invar,"."),
            big=large)
 } # end of examinevar
 
-#' @title examinedata plots the yearly distributions of catch and effort from 'x'
-#' 
-#' @description examinedata plots the yearly distributions of the number of 
-#'     records, the catch, the effort, and the geometric mean cpue by year for 
-#'     the data in the fishery dependent data in the data.frame x. It also 
-#'     tabulates these values.  Each of these are stored either as .csv or .png 
-#'     files 'in resdir'. It also logs these files in resfile, which opens the 
-#'     possibility of displaying all results in a local webpage under a tab 
-#'     labelled 'yeardata'. The 'resdir', 'resfile', and 'runname' should be the 
-#'     same as those used by makehtml to prepare a directory and 'resfile' to 
-#'     store the files to be used to make a local webpage of results. 
-#'
-#' @param x  the data.frame of fishery dependent data
-#' @param catch the name used to identify the catch factor of the species
-#' @param labcatch the axis label for catch
-#' @param effort the name used to identify the effort factor of the species
-#' @param labeffort the axis label for effort
-#' @param cpue the name used to identify the cpue factor of the species
-#' @param labcpue the axis label for cpue
-#' @param LnCE column name of log(cpue) in x, default='LnCE'
-#' @param labLcpue the axis label for log(cpue)
-#' @param year the name used to identify the year factor of the species
-#' @param spsname the name of the species of interest.
-#' @param resdir the full path of the results directory into which the plot files
-#'     and the .csv files for the tables are to be stored. 
-#' @param resfile the full path and name of the '.csv' file used to store the 
-#'     filenames, category, and caption for each plot and table. 
-#' @param runname the name of the particular run being made 
-#' @param plotnum the number of rows an columns of plots used, default=c(1,1)
-#' @param wid the width of each plot, default=6
-#' @param hgt the height of each plot, default=5
-#' @param xlimit a veector of 12 containing the xlim values, Lbound, Rbound, 
-#'     and inc, for four of the plots. Default is rep(NA,12). For the 
-#'     third plot no inc value is required so set it to zero (it will be ignored)
-#' 
-#' @return nothing but it does add 4 plots and two tables to the results
-#' @export
-#'
-#' @examples
-#' print("wait on internal data")
-examinedata <- function(x,
-                        catch="catch",labcatch="catch",
-                        effort="hours",labeffort="effort",
-                        cpue="cpue",labcpue="cpue",
-                        LnCE="LnCE",labLcpue="log(cpue)",
-                        year="year",spsname="",
-                        resdir="",resfile="",runname="",
-                        plotnum=c(1,1),wid=6,hgt=5,
-                        xlimit=rep(NA,12)) { 
-  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";
-  # spsname="scalloped hammerhead";resdir=resdir; resfile=resfile; runname=runname;
-  # plotnum=c(5,4);wid=6; hgt=5; xlim=rep(NA,12)
-  limitx <- matrix(xlimit,nrow=4,ncol=3,byrow=TRUE)
-  records <- as.numeric(table(x[,year]))
-  cby <- tapply(x[,catch],x[,year],sum,na.rm=TRUE)/1000
-  eby <- tapply(x[,effort],x[,year],sum,na.rm=TRUE)
-  geoby <-  tapply(x[,cpue],x[,year],geomean)
-  annsum <- cbind(records=records,catch=cby,effort=eby,geomet=geoby)
-  
-  filen <- filenametopath(resdir,paste0("catch_by_year_",runname,".png"))
-  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x,xlimit=limitx[1,],years="year", plots=plotnum,
-                 pickvar=catch,varlabel=labcatch,normadd=FALSE,left=FALSE)
-  caption <- paste0("Distribution of positive catches for ",spsname," by year.")
-  addplot(filen,resfile=resfile,category="yeardata",caption)
-  
-  filen <- filenametopath(resdir,paste0(effort,"_by_year_",runname,".png"))
-  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x,xlimit=limitx[2,],years="year",plots=plotnum,
-                  pickvar=effort,varlabel=labeffort,
-                  normadd=FALSE,left=FALSE)
-  caption <- paste0("Distribution of effort levels for ",spsname," by year.")
-  addplot(filen,resfile=resfile,category="yeardata",caption)
-  
-  filen <- filenametopath(resdir,paste0("catch_by_effort_",runname,".png"))
-  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  xyplotyear(x,yvar=catch,xvar=effort,year=year,plotnum=plotnum,
-             xlim=limitx[3,1:2],addline=TRUE,xlab=labeffort,ylab=labcatch)
-  caption <- paste0("Distribution of catch vs effort for ",spsname," by year. ",
-                    "Lines are linear regressions through each year's data-set.")
-  addplot(filen,resfile=resfile,category="yeardata",caption)
-  
-  pickCE <- which((x[,catch] > 0) & (x[,effort] > 0))
-  filen <- filenametopath(resdir,paste0("annual_geometric_mean_CPUE_",runname,".png"))
-  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  ans <- histyear(x[pickCE,],xlimit=limitx[4,],years="year",plots=plotnum,
-                  pickvar=LnCE,varlabel=labLcpue,left=FALSE)
-  caption <- paste0("Annual Geometric Mean CPUE for ",spsname," by year.")
-  addplot(filen,resfile=resfile,category="yeardata",caption)
-  
-  yrs <- as.numeric(rownames(annsum))
-  filen <- filenametopath(resdir,paste0("year_summary_",runname,".png"))
-  label <- colnames(annsum)
-  plotprep(width=wid,height=hgt,newdev=FALSE,filename=filen,cex=0.9,verbose=FALSE)
-  parset(plots=c(2,2))
-  for (i in 1:4) {
-    ymax <- getmax(annsum[,i])
-    plot(yrs,annsum[,i],type="l",lwd=2,ylim=c(0,ymax),yaxs="i",ylab=label[i],
-         xlab="",panel.first=grid())
-  }
-  caption <- paste0("Plots of records, catch, effort, and geometric mean cpue ",
-                    "by year for ",spsname,".")
-  addplot(filen,resfile=resfile,category="yeardata",caption)
-
-  filen <- filenametopath(resdir,paste0("year_summary_",runname,".csv"))
-  addtable(annsum,filen,resfile,category="yeardata",
-           caption="Annual summary for scallop Hammerhead sharks.")
-  } # end of examinedata
 
 #' @title histyear plots a histogram of a given variable for each year available
 #'
@@ -1123,12 +1131,14 @@ qqdiag <- function(inmodel,plotrug=FALSE,bins=NA,hline=0.0,
 #'     the xlim is set to the range of the input xvar
 #' @param addline should a linear regression be fitted and added to each plot
 #'     default=TRUE
+#' @param origin should the regression pass through the origin, default=FALSE 
 #' @param xlab the  generic label for the x-axis, default='', if left empty the 
 #'     xvar name will be used
 #' @param ylab the generic label for the y-axis, default='', if left empty the 
 #'     yvar name will be used
 #' @param maxy is available if you wish to vary the maximum y-axis value. The 
 #'     default=NA, which means it will use getmax x 1.15 to find a maximum 
+#' 
 #'
 #' @return currently nothing but it does plot a graph
 #' @export
@@ -1136,7 +1146,8 @@ qqdiag <- function(inmodel,plotrug=FALSE,bins=NA,hline=0.0,
 #' @examples
 #' print("wait on internal data")
 xyplotyear <- function(x,yvar="",xvar="",year="year",plotnum=c(1,1),
-                       xlim=c(0,12),addline=TRUE,xlab="",ylab="",maxy=NA) {
+                       xlim=c(0,12),addline=TRUE,origin=FALSE,
+                       xlab="",ylab="",maxy=NA) {
   if (is.na(maxy)) {
      ymax <- getmax(x[,yvar],mult=1.15)
   } else {
@@ -1155,9 +1166,15 @@ xyplotyear <- function(x,yvar="",xvar="",year="year",plotnum=c(1,1),
          xlim=xlim,ylim=c(0,ymax))
     label <- paste0(N," ",round(sum(x2[,yvar],na.rm=TRUE)/1000,2))
     if (addline) {
-      model <- lm(x2[,yvar] ~ x2[,xvar])
+      if (origin) {
+        model <- lm(x2[,yvar] ~ x2[,xvar] - 1)  
+        grad <- round(coef(model),2)
+      } else {
+        model <- lm(x2[,yvar] ~ x2[,xvar]) 
+        grad <- round(coef(model)[2],2)
+      }
       abline(model,lwd=2,col=2)
-      label <- paste0(N," _ ",round(coef(model)[2],2)," _ ",
+      label <- paste0(N," _ ",grad," _ ",
                       round(sum(x2[,yvar],na.rm=TRUE)/1000,2))
     }
     text(0,0.95*ymax,label,cex=0.8,pos=4)

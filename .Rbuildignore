@@ -4,3 +4,5 @@
 ^data-raw$
 ^data-raw\.*$
 ^README\.Rmd$
+^data-raw\east$
+^data-raw\east\*.*$

@@ -22,7 +22,8 @@ examinedata(
   plotnum = c(1, 1),
   wid = 6,
   hgt = 5,
-  xlimit = rep(NA, 12)
+  xlimit = rep(NA, 12),
+  category = "yeardata"
 )
 }
 \arguments{
@@ -65,6 +66,9 @@ filenames, category, and caption for each plot and table.}
 \item{xlimit}{a veector of 12 containing the xlim values, Lbound, Rbound, 
 and inc, for four of the plots. Default is rep(NA,12). For the 
 third plot no inc value is required so set it to zero (it will be ignored)}
+
+\item{category}{default='yeardata' but in case this is called for a subset
+of data then it can be set to whatever you wish}
 }
 \value{
 nothing but it does add 4 plots and two tables to the results

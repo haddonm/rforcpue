@@ -22,7 +22,7 @@ source("C:/Users/User/Dropbox/rcode2/rforcpue/data-raw/sourcefile.R")
 
 
 # First get the data
-datafile <- paste0(datadir,"/CatchEffortData_2020-02-11.RData")
+datafile <- paste0(datadir,"/CatchEffortData_2020-06-15.RData")
 load(datafile)
 ab <- abCEbl # simplify, simplify, simplify! Don't you just mean simplify?
 columns <- colnames(ab) 
@@ -32,25 +32,91 @@ replace <- c("diver_id","fishing_date","fishyear","fishmonth","blockno",
 repwith <- c("diver","date","year","month","block","subblock","zone",
              "allcatch","pblip","entitle","percbl")
 colnames(ab) <- tidynames(columns,replace,repwith)
-ab$ports <- cleanname(ab$ports)
-ab$take_vessel <- cleanname(ab$take_vessel)
 pick <- which(ab[,"year"] > 2019) # lastyr set to 2019 to remove
 ab <- droplevels(ab[-pick,])      # any 2020 records
 dim(ab)
 
 # make selection using criteria described in supplementary material
 pickrec2 <- which((ab$hours > 0) & (ab$hours < 12) &
-                    (ab$catch > 0) & (ab$catch < 1300) &
-                    (ab$cpue < 340) & (ab$cpue > 5.0) & (ab$zone == "E") &
-                    (ab$block == 13))
+                    (ab$catch > 0) & (ab$catch < 1000) &
+                    (ab$cpue < 340) & (ab$cpue > 5.0) & 
+                    (ab$zone == "E"))
 ab1 <- droplevels(ab[pickrec2,])
 ab3 <- droplevels(ab[-pickrec2,])
 dim(ab1)
 properties(ab1)
 
-# add total catch and number of active years to ab1
+# add total catch and number of active years by diver to ab1
 ab2 <- addcntcat(ab1)
 properties(ab2)
+
+blk <- c(13,14,16,17,20,21,23,24,27,29,31)
+pick <- which(ab2$block %in% blk)
+ab2 <- droplevels(ab2[pick,])
+
+blks <- sort(unique(ab2$block))
+nblk <- length(blks)
+blks
+
+resdir <- paste0(rawdir,"east")
+dirExists(resdir)
+runname <- "eastblk"
+resfile <- setuphtml(resdir,runname)
+
+starttime <- as.character(Sys.time())
+
+examinedata(ab2,spsname="Blacklip Abalone",resdir=resdir,resfile=resfile,
+            runname=runname,plotnum=c(7,4),hgt=7)
+
+
+examinevar(ab2,invar="block",spsname="Blacklip Abalone",
+           resdir=resdir,resfile=resfile,runname=runname,
+           addlines=3,hgt=7)
+
+
+pick <- which(ab2$count > 1)
+examinevar(ab2[pick,],invar="diver",spsname="Blacklip Abalone",
+           resdir=resdir,resfile=resfile,runname=runname,
+           addlines=20,hgt=9)
+
+examinevar(ab2,invar="month",spsname="Blacklip Abalone",
+           resdir=resdir,resfile=resfile,runname=runname,
+           addlines=3,wid=7,hgt=8)
+
+for (i in 1:nblk) {
+  pickB <- which(ab2$block == blks[i])
+  ab3 <- droplevels(ab2[pickB,])
+  
+  examinedata(ab3,spsname=paste0("Blacklip Abalone ",blks[i]),
+              resdir=resdir,resfile=resfile,runname=paste0("east",blks[i]),
+              plotnum=c(7,4),hgt=7,category=paste0("year",blks[i]))
+}
+
+
+endtime <- as.character(Sys.time())
+# setup local website of results----------------------------------------
+reportlist <- list(
+  runname=runname,
+  starttime=starttime,
+  endtime=endtime
+)
+
+runnotes <- "East Coast Data, limited to productive blocks." # optional, could be ""
+
+#  source(filenametopath(sourcedir,"sourcer.R"))
+make_html(replist=reportlist,resdir=resdir,width=500,
+          openfile=TRUE,runnotes=runnotes,verbose=FALSE,
+          packagename="rforcpue")
+
+
+
+
+
+
+
+
+
+
 
 
 mod4 <- makeonemodel(labelM)# First a simple linear model
