@@ -14,4 +14,6 @@
 
 * 11-07-2020 0.0.0.1650 Continued development of examinevar and examinedata, which involved changes to histyear.
 
-*13-07-2020 0.0.0.1600 Further improvements and generalizations to examinevar and examinedata, which entailed changes to category plot. 
+* 13-07-2020 0.0.0.1600 Further improvements and generalizations to examinevar and examinedata, which entailed changes to category plot. 
+
+* 11/08/2020 0.0.0.1550 Removed the data-raw contents as being spurious to the package. Small improvements to some documentation of functions and generalization.

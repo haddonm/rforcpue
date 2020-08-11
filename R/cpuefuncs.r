@@ -742,7 +742,7 @@ scaleCE <- function(invect,avCE=1.0) {
 #'  plotstand(out,bars=TRUE)
 #' }
 standLM <- function(inmods,indat,inlab="",console=TRUE){
-   # inmods=mods; indat=ab2; inlab="Block13E"; console=TRUE
+   # inmods=mods; indat=ab3[pickB,]; inlab="Block13E"; console=TRUE
    NModels <- length(inmods)
    labelM <- inmods[[NModels]]
    NModels <- NModels - 1
@@ -924,7 +924,6 @@ toXL <- function(x,output=TRUE) {
    write.table(x,"clipboard",sep="\t")
    if(output) print(x)
 }
-
 
 #' @title turnover estimate turnover of vessels from catch by vessel by year data
 #'
