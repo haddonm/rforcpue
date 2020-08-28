@@ -52,9 +52,6 @@ examinedata(
 \item{resdir}{the full path of the results directory into which the plot files
 and the .csv files for the tables are to be stored.}
 
-\item{resfile}{the full path and name of the '.csv' file used to store the 
-filenames, category, and caption for each plot and table.}
-
 \item{runname}{the name of the particular run being made}
 
 \item{plotnum}{the number of rows an columns of plots used, default=c(1,1)}

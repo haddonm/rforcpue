@@ -2,15 +2,15 @@
 % Please edit documentation in R/cpuefuncs.r
 \name{getfact}
 \alias{getfact}
-\title{getfact extracts parameter estimates for a given factor from a outce object}
+\title{getfact extracts parameter estimates for a given factor}
 \usage{
 getfact(inmat, invar, biascorrect = TRUE)
 }
 \arguments{
-\item{inmat}{generally this will be an outce object but it can be
+\item{inmat}{this can be an outce object from standLM, but it can also be
 a matrix of coefficients, an lm object, or a gam object}
 
-\item{invar}{the model variable whose parameters are wanted}
+\item{invar}{the model variable whose parameters are wanted, eg "month"}
 
 \item{biascorrect}{when back transforming the coefficients should we use the
 log-normal bias-correction or not. default=TRUE}
@@ -20,7 +20,8 @@ a matrix containing the parameters for invar
 }
 \description{
 getfact extracts the parameter estimates for a given factor
-    from an outce object. It does this by searching to rownames of the
+    from either a matrix, an array, an outce object (from standLM), or an 
+    lm object or a gam object. It does this by searching the rownames of the
     output parameters of the optimum model. It also checks for interaction
     terms, which for categorical factors is the same as determining a
     trend of the two factors relative to each other. e.g. for Zone:Month

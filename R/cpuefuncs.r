@@ -224,18 +224,19 @@ getaav <- function(invect,narm=TRUE) { # invect=cbby[,1]; narm=TRUE
    return(aav)
 } # end of getaav
 
-#' @title getfact extracts parameter estimates for a given factor from a outce object
+#' @title getfact extracts parameter estimates for a given factor
 #'
 #' @description getfact extracts the parameter estimates for a given factor
-#'     from an outce object. It does this by searching to rownames of the
+#'     from either a matrix, an array, an outce object (from standLM), or an 
+#'     lm object or a gam object. It does this by searching the rownames of the
 #'     output parameters of the optimum model. It also checks for interaction
 #'     terms, which for categorical factors is the same as determining a
 #'     trend of the two factors relative to each other. e.g. for Zone:Month
 #'     the outcome is the monthly trend for each zone.
 #'
-#' @param inmat generally this will be an outce object but it can be
+#' @param inmat this can be an outce object from standLM, but it can also be
 #'     a matrix of coefficients, an lm object, or a gam object
-#' @param invar the model variable whose parameters are wanted
+#' @param invar the model variable whose parameters are wanted, eg "month"
 #' @param biascorrect when back transforming the coefficients should we use the
 #'     log-normal bias-correction or not. default=TRUE
 #'
@@ -255,7 +256,7 @@ getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=mat; invar="year"
          }
       }
    }
-   if (length(whatclass) == 2) whatclass <-  whatclass[1]
+   if (length(whatclass) == 2) whatclass <-  whatclass[1] # for R4 matrices
    if (whatclass %in% allowable) {
       if ((whatclass == "matrix") | (whatclass == "array")) pardat <- inmat
       if (whatclass == "outce") pardat <- inmat$Parameters$coefficients
