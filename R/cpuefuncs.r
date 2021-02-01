@@ -743,7 +743,7 @@ scaleCE <- function(invect,avCE=1.0) {
 #'  plotstand(out,bars=TRUE)
 #' }
 standLM <- function(inmods,indat,inlab="",console=TRUE){
-   # inmods=mods; indat=ab3[pickB,]; inlab="Block13E"; console=TRUE
+   # inmods=mod; indat=ab3; inlab="Block13E"; console=TRUE
    NModels <- length(inmods)
    labelM <- inmods[[NModels]]
    NModels <- NModels - 1

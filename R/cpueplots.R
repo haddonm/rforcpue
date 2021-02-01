@@ -277,7 +277,7 @@ examinedata <- function(x,
                         cpue="cpue",labcpue="cpue",
                         LnCE="LnCE",labLcpue="log(cpue)",
                         year="year",spsname="",
-                        resdir="",resfile="",runname="",
+                        resdir="",runname="",
                         plotnum=c(1,1),wid=6,hgt=5,
                         xlimit=rep(NA,12),
                         category="yeardata") { 

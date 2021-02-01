@@ -17,7 +17,6 @@ examinedata(
   year = "year",
   spsname = "",
   resdir = "",
-  resfile = "",
   runname = "",
   plotnum = c(1, 1),
   wid = 6,
