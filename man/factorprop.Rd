@@ -7,7 +7,7 @@
 factorprop(
   indat,
   fact,
-  resdir,
+  rundir,
   runname,
   year = "year",
   catch = "catch",
@@ -20,7 +20,7 @@ factorprop(
 
 \item{fact}{the name of the factor being explored, a character string}
 
-\item{resdir}{the results directory into which all results for the runname are
+\item{rundir}{the results directory into which all results for the runname are
 put}
 
 \item{runname}{the name of the particular analysis}

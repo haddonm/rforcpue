@@ -16,7 +16,7 @@ examinedata(
   labLcpue = "log(cpue)",
   year = "year",
   spsname = "",
-  resdir = "",
+  rundir = "",
   runname = "",
   plotnum = c(1, 1),
   wid = 6,
@@ -48,7 +48,7 @@ examinedata(
 
 \item{spsname}{the name of the species of interest.}
 
-\item{resdir}{the full path of the results directory into which the plot files
+\item{rundir}{the full path of the results directory into which the plot files
 and the .csv files for the tables are to be stored.}
 
 \item{runname}{the name of the particular run being made}
@@ -74,9 +74,9 @@ examinedata plots the yearly distributions of the number of
     records, the catch, the effort, and the geometric mean cpue by year for 
     the data in the fishery dependent data in the data.frame x. It also 
     tabulates these values.  Each of these are stored either as .csv or .png 
-    files 'in resdir'. It also logs these files in resfile, which opens the 
+    files 'in rundir'. It also logs these files in resfile, which opens the 
     possibility of displaying all results in a local webpage under a tab 
-    labelled 'yeardata'. The 'resdir', 'resfile', and 'runname' should be the 
+    labelled 'yeardata'. The 'rundir', 'resfile', and 'runname' should be the 
     same as those used by makehtml to prepare a directory and 'resfile' to 
     store the files to be used to make a local webpage of results.
 }

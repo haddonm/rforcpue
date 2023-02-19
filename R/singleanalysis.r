@@ -46,7 +46,7 @@ makeonemodel <- function(labelModel,dependent = "LnCE") { # labelModel=labelM[1:
 #' @return a list with a similar structure to the out object, so not
 #'    a outce class member but can be used with plotstand
 #' @export  dosingle
-dosingle <- function(inmodel,indat) {  # inmodel=mod; indat=sps2
+dosingle <- function(inmodel,indat) {  # inmodel=inmod; indat=ab2
   ans <- lm(inmodel,data=indat)
   bits <- unlist(strsplit(as.character(inmodel)," "))
   modcoef <- summary(ans)$coefficients

@@ -4,7 +4,7 @@
 \alias{saveresults}
 \title{saveresults sends the tables generated to a text file in resultdir}
 \usage{
-saveresults(sps, answer, out, mods, splabel, resdir)
+saveresults(sps, answer, out, mods, splabel, rundir)
 }
 \arguments{
 \item{sps}{the data.frame containing all data relating to the species}
@@ -20,7 +20,7 @@ standardization}
 
 \item{splabel}{the name of the species and fishery}
 
-\item{resdir}{the path to the results directory}
+\item{rundir}{the path to the results directory}
 }
 \value{
 nothing, but it does write a text file to the results directory.

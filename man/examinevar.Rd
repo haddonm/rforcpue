@@ -12,11 +12,12 @@ examinevar(
   cpue = "cpue",
   year = "year",
   spsname = "",
-  resdir,
+  rundir,
   runname,
   addlines = 5,
   wid = 6,
   hgt = 5,
+  textcex = 0.75,
   category = invar
 )
 }
@@ -36,7 +37,7 @@ examined}
 
 \item{spsname}{the name of the species of interest.}
 
-\item{resdir}{the full path of the results directory into which the plot files
+\item{rundir}{the full path of the results directory into which the plot files
 and the .csv files for the tables are to be stored.}
 
 \item{runname}{the name of the particular run being made}
@@ -50,10 +51,12 @@ more lines may need to be added to space out the year totals.}
 
 \item{hgt}{the height of each plot, default=5}
 
+\item{textcex}{what text size to use in the plots, default=0.75}
+
 \item{category}{default = invar, but can be changed if required}
 }
 \value{
-nothing but it does generate 4 plots and 2 tables into resdir
+nothing but it does generate 4 plots and 2 tables into rundir
 }
 \description{
 examinevar tabulates and plots the properties of an input
@@ -63,13 +66,15 @@ examinevar tabulates and plots the properties of an input
     the input variable (invar), the records-by-year, the catch-by-year, and 
     the effort-by-year. for each level of 'invar' it also counts the records
     across years, and sums the catches and effort across years. Each of these 
-    are stored either as .csv or .png files 'in resdir'. It also logs these
+    are stored either as .csv or .png files 'in rundir'. It also logs these
     files in resfile, which opens the possibility of displaying all results
     in a local webpage under a tab labelled by the contents of 'invar'. The 
-    'resdir', 'resfile', and 'runname' should be the same as those used by
+    'rundir', 'resfile', and 'runname' should be the same as those used by
     makehtml to prepare a directory and 'resfile' to store the files to be
     used to make a local webpage of results.
 }
 \examples{
 print("wait on internal data")
+# x=ab;invar="zone";spsname="blacklip";rundir=rundir;runname="zone"
+# catch="catch";effort="hours";cpue="cpue";year="year";addlines=5;wid=6;hgt=5;category=invar
 }

@@ -12,7 +12,8 @@ plotlag(
   interval = "year",
   filename = "",
   resol = 200,
-  fnt = 7
+  fnt = 7,
+  label = ""
 )
 }
 \arguments{
@@ -35,6 +36,9 @@ with that name will be put into the working directory.}
 
 \item{fnt}{the font used in the plot and axes. Default=7, bold Times. Using
 6 gives Times, 1 will give SansSerif, 2 = bold Sans}
+
+\item{label}{a name for the plot, perhaps the sau or black name to identify
+the data source.}
 }
 \value{
 a list containing some summary results, the anova of the linear

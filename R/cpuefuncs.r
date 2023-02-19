@@ -125,41 +125,6 @@ coef.outce <- function(inout) {   # S3 class development
    return(ans)
 } # end of coef.outce
 
-#' @title expandmatrix reshapes a matrix of values into a 3 column data.frame
-#' 
-#' @description expandmatrix takes an oblong matrix of values and expands it
-#'     into a three column data.frame of row, column, value. This is then easier 
-#'     to plot as a scattergram or is used within categoryplot. It expects to 
-#'     have the year values in the columns = xvalues
-#'
-#' @param x a matrix of values 
-#'
-#' @return a 3-column matrix of (rows x cols) rows from the input matrix
-#' @export
-#'
-#' @examples
-#' x <- matrix(rnorm(25,5,1),nrow=5,ncol=5,dimnames=list(1:5,1:5))
-#' res <- expandmatrix(x)
-#' res
-expandmatrix <- function(x) { #  x=t(numyr)
-   ylabel <- as.numeric(rownames(x))
-   xlabel <- as.numeric(colnames(x))
-   nx <- length(xlabel)
-   ny <- length(ylabel)
-   res <- as.data.frame(matrix(0,nrow=(nx*ny),ncol=3))
-   count <- 0
-   for (i in 1:nx) {
-      for (j in 1:ny) {
-         count <- count + 1
-         res[count,] <- c(xlabel[i],ylabel[j],x[j,i])
-      }
-   }
-   rownames(res) <- paste0(res[,1],"_",res[,2])
-   colnames(res) <- c("rows","cols","value")
-   
-   return(res)
-} # end of expandmatrix
-
 #' @title fishery generates vectors of year, catch, effort, and cpue
 #'
 #' @description fishery generates vectors of year, catch, effort, and cpue
@@ -612,7 +577,7 @@ makeLabel <- function(invect,insep="_") {
 #'     standardization
 #' @param mods the mods defined for the standardization
 #' @param splabel the name of the species and fishery
-#' @param resdir the path to the results directory
+#' @param rundir the path to the results directory
 #'
 #' @return nothing, but it does write a text file to the results directory.
 #' @export
@@ -621,7 +586,7 @@ makeLabel <- function(invect,insep="_") {
 #' \dontrun{
 #' print("this will take some doing")
 #' }
-saveresults <- function(sps,answer,out,mods,splabel,resdir) {
+saveresults <- function(sps,answer,out,mods,splabel,rundir) {
    cmeth <- tapply(sps$catch_kg,list(sps$Year,sps$Method),sum,na.rm=T)/1000
    czone <- tapply(sps$catch_kg,list(sps$Year,sps$Zone),sum,na.rm=T)/1000
    cfishery <- tapply(sps$catch_kg,list(sps$Year,sps$Fishery),sum,na.rm=T)/1000
@@ -631,7 +596,7 @@ saveresults <- function(sps,answer,out,mods,splabel,resdir) {
    LimCZone <- tapply(sps1$catch_kg,list(sps1$Year,sps1$Zone),sum,na.rm=T)/1000
    LimCDep <- tapply(sps1$catch_kg,list(sps1$Year,sps1$DepCat),sum,na.rm=T)/1000
    #datasum <- makedatasum(sps,sps1,out)
-   fileout <- paste(resdir,splabel,".txt",sep="")
+   fileout <- paste(rundir,splabel,".txt",sep="")
    if (file.exists(fileout)) file.remove(fileout)
    sink(fileout)
    print(splabel,quote=F)

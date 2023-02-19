@@ -185,7 +185,7 @@ divbb <- function(ind,sau="block",legloc="topright",diver="diver",year="year") {
 #'
 #' @param indat the data.frame being used for the standardization
 #' @param fact the name of the factor being explored, a character string
-#' @param resdir the results directory into which all results for the runname are
+#' @param rundir the results directory into which all results for the runname are
 #'     put
 #' @param runname the name of the particular analysis
 #' @param year the name of the year factor in the data.frame. default='year'
@@ -200,7 +200,7 @@ divbb <- function(ind,sau="block",legloc="topright",diver="diver",year="year") {
 #'
 #' @examples
 #' print("need to wait on an internal data.frame")
-factorprop <- function(indat,fact,resdir,runname,
+factorprop <- function(indat,fact,rundir,runname,
                        year="year",catch="catch",effort="hours",cpue="cpue") {
   #  indat=ab2; fact="diver";year="year";catch="catch";effort="hours";cpue="cpue"
   records <- table(indat[,fact])
@@ -210,18 +210,18 @@ factorprop <- function(indat,fact,resdir,runname,
   totC <- rowSums(fcby,na.rm=TRUE)
   byfact <- cbind(records,years=county,totalC=totC)
 
-  filename <- filenametopath(resdir,paste0(fact,"_activeyr_",runname,".png"))
+  filename <- filenametopath(rundir,paste0(fact,"_activeyr_",runname,".png"))
   plotprep(width=7,height=4,filename=filename,verbose=FALSE)
   inthist(county,width=0.9,col=2,border=3,ylabel="Frequency",
           xlabel=paste0("Years ",fact," Reported Catches"),
           panel.first=grid())
-  addplot(filen=filename,resdir=resdir,category=fact,
+  addplot(filen=filename,rundir=rundir,category=fact,
           caption=paste0("Years ",fact," Reported Catches"))  
   
   cumtotC <- cumsum(sort(totC,decreasing = TRUE))
   nfact <- length(cumtotC)
   maxC <- tail(cumtotC,1)
-  filename <- filenametopath(resdir,paste0(fact,"_cumulC_",runname,".png"))
+  filename <- filenametopath(rundir,paste0(fact,"_cumulC_",runname,".png"))
   ymax <- getmax(cumtotC)
   plotprep(width=7,height=4,filename=filename,verbose=FALSE)
   plot(1:nfact,cumtotC,type="l",lwd=2,ylab="cumulative Total Catch",
@@ -229,17 +229,17 @@ factorprop <- function(indat,fact,resdir,runname,
           panel.first=grid())
   abline(v=which.closest((maxC*0.95),cumtotC),lwd=1,col=2)
   abline(v=which.closest(maxC/2,cumtotC),lwd=1,col=2)  
-  addplot(filen=filename,resdir=resdir,category=fact,
+  addplot(filen=filename,rundir=rundir,category=fact,
           caption=paste0(fact," Cumulative Catches with ~50% and ~95% catches"))  
   
-  filename <- filenametopath(resdir,paste0(fact,"_rby_",runname,".csv"))
-  addtable(rby,filen=filename,resdir=resdir,category=fact,
+  filename <- filenametopath(rundir,paste0(fact,"_rby_",runname,".csv"))
+  addtable(rby,filen=filename,rundir=rundir,category=fact,
            caption=paste0("Records by year by ",fact,"."),big=TRUE)
-  filename <- filenametopath(resdir,paste0(fact,"_cby_",runname,".csv"))
-  addtable(fcby,filen=filename,resdir=resdir,category=fact,
+  filename <- filenametopath(rundir,paste0(fact,"_cby_",runname,".csv"))
+  addtable(fcby,filen=filename,rundir=rundir,category=fact,
            caption=paste0("Catch by year by ",fact,"."),big=TRUE)
-  filename <- filenametopath(resdir,paste0(fact,"_",runname,".csv"))
-  addtable(byfact,filen=filename,resdir=resdir,category=fact,
+  filename <- filenametopath(rundir,paste0(fact,"_",runname,".csv"))
+  addtable(byfact,filen=filename,rundir=rundir,category=fact,
            caption=paste0("Total records active years and catch by ",fact,"."),
            big=TRUE)
   return(invisible(list(rby=rby,cby=fcby,byfact=byfact)))
@@ -277,7 +277,7 @@ filelist <- function(indir,findtext="",ignorecase=FALSE,silent=FALSE) {
   }
   nfile <- length(contents)
   refNo <- seq(1,nfile,1)
-  #resdirL <- nchar(indir)
+  #rundirL <- nchar(indir)
   columns <- c("filename","size","isdir","mdate","mtime","adate","atime",
                "refNo")
   fileout <- as.data.frame(matrix(0,nrow=nfile,ncol=length(columns),
@@ -362,7 +362,7 @@ hbb <- function(ind,sau="block",legloc="topright",hours="hours",year="year") {
 #'     a table of the properties of the input data.frame
 #'
 #' @param indat the data.frame being analysed
-#' @param resdir the results directory into which all results for the runname are
+#' @param rundir the results directory into which all results for the runname are
 #'     put
 #' @param runname the name of the particular analysis
 #' @param year the name of the year factor in the data.frame. default='year'
@@ -371,13 +371,13 @@ hbb <- function(ind,sau="block",legloc="topright",hours="hours",year="year") {
 #' @param cpue the name of the cpue factor in the data.frame. default='cpue'
 #'
 #' @return invisibly returns a matrix of year, records, catch, hours, and 
-#'    bias-corrected geometric mean cpue. Also adds a table to the resdir and 
+#'    bias-corrected geometric mean cpue. Also adds a table to the rundir and 
 #'    resfile
 #' @export
 #'
 #' @examples
 #' print("need to wait on an internal data.frame")
-yearprop <- function(indat,resdir,runname,
+yearprop <- function(indat,rundir,runname,
                      year="year",catch="catch",effort="hours",cpue="cpue") {
   rbf <- table(indat[,year])
   factnames <- as.numeric(names(rbf))
@@ -387,7 +387,7 @@ yearprop <- function(indat,resdir,runname,
   yearprops <- cbind(factnames,rbf,cbf,ebf,geom)
   colnames(yearprops) <- c("year","records","catch","hours","geom")
   # plot summary statistics
-  filename <- filenametopath(resdir,paste0("yearprops_",runname,".png"))
+  filename <- filenametopath(rundir,paste0("yearprops_",runname,".png"))
   plotprep(width=7,height=5,filename=filename,verbose=FALSE)
   parset(plots=c(2,2),margin=c(0.3,0.45,0.05,0.1))
   ymax <- getmax(yearprops[,"records"])
@@ -402,16 +402,16 @@ yearprop <- function(indat,resdir,runname,
   ymax <- getmax(yearprops[,"geom"])
   plot(yearprops[,"year"],yearprops[,"geom"],type="l",lwd=2,xlab="",yaxs="i",
        ylab="Geometric Mean CPUE",panel.first=grid(),ylim=c(0,ymax))
-  addplot(filen=filename,resdir=resdir,category="year",
+  addplot(filen=filename,rundir=rundir,category="year",
           caption=paste0("Summary of properties by Year"))   
   # add a table of the summary values
-  filename <- filenametopath(resdir,paste0("dataprops_",runname,".csv"))
-  addtable(properties(indat),filen=filename,resdir=resdir,category="year",
+  filename <- filenametopath(rundir,paste0("dataprops_",runname,".csv"))
+  addtable(properties(indat),filen=filename,rundir=rundir,category="year",
            caption=paste0("Properties of the input data.frame."))
   
   
-  filename <- filenametopath(resdir,paste0("yearprops_",runname,".csv"))
-  addtable(yearprops,filen=filename,resdir=resdir,category="year",
+  filename <- filenametopath(rundir,paste0("yearprops_",runname,".csv"))
+  addtable(yearprops,filen=filename,rundir=rundir,category="year",
            caption=paste0("Properties of the year factor."))
   return(invisible(yearprops))
 } # end of yearprop

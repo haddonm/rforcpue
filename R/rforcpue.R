@@ -86,8 +86,12 @@ NULL
 NULL
 
 #' @import graphics
-#' @import rutilsMH
+#' @import codeutils
 #' @import makehtml
+#' @importFrom hplot addlnorm addnorm categoryplot expandmatrix
+#' @importFrom hplot histyear inthist linept makepolygon newplot panel.hist
+#' @importFrom hplot parset parsyn pickbound plot1 plotnull plotprep plotxyy
+#' @importFrom hplot RGB setplot uphist xyplotyear yearBubble
 #' @importFrom grDevices png rgb dev.cur dev.new dev.off
 #' @importFrom stats anova as.formula dnorm lm median qnorm qqline qqnorm
 #' @importFrom stats quantile sd loess ccf coef

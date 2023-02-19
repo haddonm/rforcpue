@@ -6,7 +6,7 @@
 \usage{
 yearprop(
   indat,
-  resdir,
+  rundir,
   runname,
   year = "year",
   catch = "catch",
@@ -17,7 +17,7 @@ yearprop(
 \arguments{
 \item{indat}{the data.frame being analysed}
 
-\item{resdir}{the results directory into which all results for the runname are
+\item{rundir}{the results directory into which all results for the runname are
 put}
 
 \item{runname}{the name of the particular analysis}
@@ -32,7 +32,7 @@ put}
 }
 \value{
 invisibly returns a matrix of year, records, catch, hours, and 
-   bias-corrected geometric mean cpue. Also adds a table to the resdir and 
+   bias-corrected geometric mean cpue. Also adds a table to the rundir and 
    resfile
 }
 \description{
