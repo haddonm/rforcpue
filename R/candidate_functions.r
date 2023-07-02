@@ -415,3 +415,56 @@ yearprop <- function(indat,rundir,runname,
            caption=paste0("Properties of the year factor."))
   return(invisible(yearprops))
 } # end of yearprop
+
+outH <- histyear(sps,pickvar="LnCE",xlimit=c(-5,15,1),
+                 years="Year",varlabel="log(CPUE)",plots=c(4,3))
+
+
+sps$LnCE <- NA
+sps$LnCE <- log(sps$catch_kg/sps$Effort)
+x <- sps
+pickvar <- "LnCE"
+xlimit=c(NA,NA,NA)
+years="Year"
+varlabel="log(CPUE)"
+vline=NA
+plots=c(4,3)
+normadd=TRUE
+left=TRUE
+
+histyear <- function(x,xlimit=c(NA,NA,NA),
+                     pickvar="cpue",years="year",varlabel="CPUE",
+                     vline=NA,plots=c(5,5),normadd=TRUE,left=TRUE) {
+  yrs <- sort(unique(x[,years]))
+  nyr <- length(yrs)
+  columns <- c("Year","maxcount","Mean","StDev","N","Min","Max")
+  results <- matrix(0,nrow=nyr,ncol=length(columns),dimnames=list(yrs,columns))
+  par(mfcol=plots,mai=c(0.25,0.25,0.05,0.05),oma=c(1.2,1.0,0.0,0.0))
+  par(cex=0.75, mgp=c(1.35,0.35,0), font.axis=7,font=7,font.lab=7)
+  if (left) adj=0 else adj=1
+  if (is.na(xlimit[1])) {
+    xlimit[1:2] <- quantile(x[,pickvar],probs=c(0,0.99))
+    bins <- seq(xlimit[1],xlimit[2],length=25)
+  } else { bins <- seq(xlimit[1],xlimit[2],xlimit[3]) }
+  pickX <- which((x[,pickvar] >= xlimit[1]) &
+                   (x[,pickvar] <= xlimit[2]))
+  x2 <- droplevels(x[pickX,])
+  for (yr in 1:nyr) {
+    pick <- which(x2[,years] == yrs[yr])
+    outh <- hist(x2[pick,pickvar],breaks=bins,col=2,main="",xlab="",ylab="")
+    mtext(paste0("  ",yrs[yr]),side=3,outer=F,line=-2,font=7,cex=0.9,adj=adj)
+    mtext(paste0("  ",length(pick)),side=3,outer=F,line=-3,font=7,cex=0.9,adj=adj)
+    if (is.numeric(vline)) abline(v=vline,col=4,lwd=2)
+    if (normadd) {
+      pickmax <- which.max(outh$counts)
+      ans <- addnorm(outh,x[pick,pickvar])
+      lines(ans$x,ans$y,col=3,lwd=2)
+      results[yr,] <- c(yrs[yr],outh$mids[pickmax],ans$stats,
+                        range(x2[pick,pickvar],na.rm=TRUE))
+    }
+  }
+  mtext("Frequency",side=2,outer=T,line=0.0,font=7,cex=1.0)
+  mtext(varlabel,side=1,outer=T,line=0.0,font=7,cex=1.0)
+  return(invisible(results))
+} # end of histyear
+

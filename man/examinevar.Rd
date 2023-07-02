@@ -75,6 +75,6 @@ examinevar tabulates and plots the properties of an input
 }
 \examples{
 print("wait on internal data")
-# x=ab;invar="zone";spsname="blacklip";rundir=rundir;runname="zone"
-# catch="catch";effort="hours";cpue="cpue";year="year";addlines=5;wid=6;hgt=5;category=invar
+# x=ab;invar="block";spsname="blacklip";rundir=rundir;runname="zone"
+# catch="catch";effort="hours";cpue="cpue";year="year";addlines=3;wid=6;hgt=5;category=invar
 }
