@@ -57,6 +57,8 @@
 #' }
 #' @docType package
 #' @name rforcpue
+#' @keywords internal
+"_PACKAGE"
 NULL
 
 

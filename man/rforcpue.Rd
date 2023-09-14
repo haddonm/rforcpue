@@ -3,6 +3,7 @@
 \docType{package}
 \name{rforcpue}
 \alias{rforcpue}
+\alias{rforcpue-package}
 \title{rforcpue a set of functions to assist with CPUE standardization}
 \description{
 The rforcpue package provides numerous functions to assist
@@ -68,3 +69,8 @@ The rforcpue package provides numerous functions to assist
 }
 }
 
+\author{
+\strong{Maintainer}: Malcolm Haddon \email{malcolm.haddon@gmail.com} (\href{https://orcid.org/0000-0001-6971-7585}{ORCID})
+
+}
+\keyword{internal}

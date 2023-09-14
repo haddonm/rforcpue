@@ -65,7 +65,8 @@ addcount <- function(indat,varid="diver",group="year",catch="catch") {
 #'  head(dataf)
 #' }
 checkDF <- function(x) {  # x <- sps1
-   if (class(x) != "data.frame") stop("Input to checkDF must be a data.frame \n\n")
+   if (!inherits(x,"data.frame")) 
+     stop("Input to checkDF must be a data.frame \n\n")
    needed <- c("Year","Month","Vessel","catch_kg","Long","Lat","Depth","DepCat","Zone",
                "Effort","LnCE","DayNight","Method","Fishery")
    dflocation <- match(needed,colnames(x))
@@ -395,18 +396,19 @@ getrmse <- function(indat,invar="cpue",inyr="year"){  # indat=fish; invar="cpue"
 #'
 #' @examples
 #' \dontrun{
-#'  data(abeg)
-#'  splabel = "Mollusc"
-#'  labelM <- c("year","diverID","month","block","boatID")
-#'  ab1 <- makecategorical(labelM,ab)
+#'  data(sps)
+#'  sps$LnCE <- log(sps$catch_kg/sps$Effort)
+#'  splabel = "test"
+#'  labelM <- c("Year","Vessel","Month","Zone")
+#'  sps1 <- makecategorical(labelM,sps)
 #'  mods <- makemodels(labelM)
-#'  out <- standLM(mods,ab1,splabel)
+#'  out <- standLM(mods,sps1,splabel)
 #'  round(out$Results,4)
 #'  round(out$WhichM,4)
 #'  getStand(out)
 #' }
 getStand <- function(x,P=0.95) {
-   if (class(x) != "outce") stop("input to getStand is not a outce object")
+   if (!inherits(x,"outce")) stop("input to getStand is not a outce object")
    yrs <- as.numeric(rownames(x$Results))
    geo <- x$Results[,1]
    opt <- x$Results[,x$Optimum]

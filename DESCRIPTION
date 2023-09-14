@@ -4,14 +4,14 @@ Description: General functions to assist with CPUE standardization.
     They include functions to conduct simple linear models, GLMs,
     and GAMs, with examples to assist people in their use.
 Depends: R (>= 3.5.0)
-Version: 0.0.0.2000
-Date: 2023-02-20
-Authors@R: 
-    person(given = "Malcolm",
-           family = "Haddon",
-           role = c("aut", "cre"),
-           email = "malcolm.haddon@gmail.com")
-Maintainer: Malcolm Haddon <malcolm.haddon@gmail.com>           
+Version: 0.0.0.3000
+Date: 2023-09-14
+Authors@R: person(given="Malcolm",
+                  family="Haddon", 
+                  email = "malcolm.haddon@gmail.com", 
+                  role = c("aut", "cre"),
+                  comment=c(ORCID="0000-0001-6971-7585"))
+Maintainer: Malcolm Haddon <malcolm.haddon@gmail.com>
 License: MIT + file LICENSE
 Imports: codeutils,
          hplot,

@@ -23,12 +23,13 @@ getStand extracts major results from an outce object. which
 }
 \examples{
 \dontrun{
- data(abeg)
- splabel = "Mollusc"
- labelM <- c("year","diverID","month","block","boatID")
- ab1 <- makecategorical(labelM,ab)
+ data(sps)
+ sps$LnCE <- log(sps$catch_kg/sps$Effort)
+ splabel = "test"
+ labelM <- c("Year","Vessel","Month","Zone")
+ sps1 <- makecategorical(labelM,sps)
  mods <- makemodels(labelM)
- out <- standLM(mods,ab1,splabel)
+ out <- standLM(mods,sps1,splabel)
  round(out$Results,4)
  round(out$WhichM,4)
  getStand(out)
