@@ -26,16 +26,8 @@ turnover estimates turnover of vessels from catch by vessel
     needs MODIFICATION
 }
 \examples{
-\dontrun{
-library(r4cpue)
+require(rforcpue)
 data(sps)
 cbv <- tapply(sps$catch_kg,list(sps$Vessel,sps$Year),sum,na.rm=TRUE)/1000
-dim(cbv)
-early <- rowSums(cbv[,1:6],na.rm=TRUE)
-late <- rowSums(cbv[,7:14],na.rm=TRUE)
-cbv1 <- cbv[order(late,-early),]
-plotprep(width=7,height=6)
-yearBubble(cbv1,ylabel="Catch by Trawl",vline=2006.5,diam=0.2)
 turnover(cbv)
-}
 }

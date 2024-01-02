@@ -133,8 +133,7 @@ diagnosticPlot <- function(inout, indat, inmodel=inout$Optimum,
 #'
 #' @examples
 #' print("wait on internal data")
-examinedata <- function(x,
-                        catch="catch",labcatch="catch",
+examinedata <- function(x,catch="catch",labcatch="catch",
                         effort="hours",labeffort="effort",
                         cpue="cpue",labcpue="cpue",
                         LnCE="LnCE",labLcpue="log(cpue)",
@@ -143,9 +142,11 @@ examinedata <- function(x,
                         plotnum=c(1,1),wid=6,hgt=5,
                         xlimit=rep(NA,12),
                         category="yeardata") { 
-  # x=dat; catch="scallop";effort="x100nethr";cpue="cpue";LnCE="LnCE";year="year";
-  # spsname="scalloped hammerhead";rundir=rundir; resfile=resfile; runname=runname;
-  # plotnum=c(5,4);wid=6; hgt=5; xlim=rep(NA,12)
+# x=ab;catch="catch";labcatch="catch";effort="hours";labeffort="effort"
+#  cpue="cpue";labcpue="cpue";LnCE="LnCE";labLcpue="log(cpue)"
+#  year="year";spsname="";rundir=rundir;runname="east"
+#  plotnum=c(1,1);wid=6;hgt=5;xlimit=rep(NA,12);category="yeardata"
+  
   limitx <- matrix(xlimit,nrow=4,ncol=3,byrow=TRUE)
   records <- as.numeric(table(x[,year]))
   cby <- tapply(x[,catch],x[,year],sum,na.rm=TRUE)/1000
@@ -198,7 +199,7 @@ examinedata <- function(x,
                     "by year for ",spsname,".")
   addplot(filen,rundir=rundir,category=category,caption)
 
-  filen <- filenametopath(rundir,paste0("year_summary_",runname,".csv"))
+  filen <- paste0("year_summary_",runname,".csv")
   addtable(annsum,filen,rundir,category=category,
            caption="Annual summary for scallop Hammerhead sharks.")
   } # end of examinedata
