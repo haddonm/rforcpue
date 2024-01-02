@@ -208,7 +208,7 @@ getaav <- function(invect,narm=TRUE) { # invect=cbby[,1]; narm=TRUE
 #'
 #' @return a matrix containing the parameters for invar
 #' @export
-getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=mat; invar="year"
+getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=outB; invar="pBlue";biascorrect=TRUE
    allowable <- c("matrix","array","outce","lm","gam")
    whatclass <- class(inmat)
    if (length(whatclass) > 2) {
@@ -242,7 +242,11 @@ getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=mat; invar="year"
    lnce <- startmat[,"Estimate"]         # first do the non-interaction terms
    se <- startmat[,"Std. Error"]
    tval <- startmat[,"t value"]
-   Prob <- startmat[,"Pr(>|t|)"]
+   if (length(grep("Pr(>|t|)",colnames(startmat))) > 0) {
+     Prob <- startmat[,"Pr(>|t|)"]
+   } else {
+     Prob <- NA
+   }
    if (biascorrect) {
       backtran <- exp(lnce + (se * se)/2)
    } else {
@@ -911,18 +915,10 @@ toXL <- function(x,output=TRUE) {
 #' @return a matrix of years by Continue, Leave, Start, Total
 #' @export
 #' @examples
-#' \dontrun{
-#' library(r4cpue)
+#' require(rforcpue)
 #' data(sps)
 #' cbv <- tapply(sps$catch_kg,list(sps$Vessel,sps$Year),sum,na.rm=TRUE)/1000
-#' dim(cbv)
-#' early <- rowSums(cbv[,1:6],na.rm=TRUE)
-#' late <- rowSums(cbv[,7:14],na.rm=TRUE)
-#' cbv1 <- cbv[order(late,-early),]
-#' plotprep(width=7,height=6)
-#' yearBubble(cbv1,ylabel="Catch by Trawl",vline=2006.5,diam=0.2)
 #' turnover(cbv)
-#' }
 turnover <- function(x,minyrs=1) {
    years <- as.numeric(colnames(x))
    ny <- length(years)
@@ -934,10 +930,10 @@ turnover <- function(x,minyrs=1) {
    }
    pick <- which(count > (minyrs - 1))
    if (length(pick) > 0) x <- x[pick,]
-   columns <- c("Continue","Leave","Start","Total")
-   turnover <- matrix(0,nrow=ny,ncol=length(columns),
+   columns <- c("Continue","Leave","Start","Total","NetDiff")
+   overturn <- matrix(0,nrow=ny,ncol=length(columns),
                       dimnames=list(years,columns))
-   turnover[1,1] <- length(which(x[,1] > 0))
+   overturn[1,1] <- length(which(x[,1] > 0))
    for (yr in 2:ny) {
       pair <- x[,(yr-1):yr]
       pickC <- which((pair[,1] > 0) & (pair[,2] > 0))
@@ -945,10 +941,11 @@ turnover <- function(x,minyrs=1) {
                                           (pair[,2] < 0.001)))
       pickS <- which(((is.na(pair[,1])) | (pair[,2] < 0.001)) &
                         (pair[,2] > 0))
-      turnover[yr,1:3] <- c(length(pickC),length(pickL),length(pickS))
+      overturn[yr,1:3] <- c(length(pickC),length(pickL),length(pickS))
    }
-   turnover[,4] <- turnover[,1] + turnover[,3]
-   return(turnover)
+   overturn[,"Total"] <- overturn[,"Continue"] + overturn[,"Start"]
+   overturn[,"NetDiff"] <- overturn[,"Start"] - overturn[,"Leave"]
+   return(overturn)
 } # end of turnover
 
 #' @title yearNA - counts NAs per year in each numeric field in a data.frame
