@@ -710,6 +710,10 @@ plotmat <- function(inm,xlab="years",ylab="",legloc="topright") {
 #'   then a vector of catches needs to be input here
 #' @param usefont enables the font used in the plot to be modified. Most
 #'   publications appear to prefer usefont=1; defaults to 7 - Times bold
+#' @param maxy default=NA, if numeric then it will be used rather than letting
+#'     the software estimate a maximum  
+#' @param miny default=0, this is used to define the bottom of the CPUE plot
+#'   
 #' @return a plot of the model with the smallest AIC (solid line) and the
 #'   geometric mean (model 1, always = LnCE ~ Year, the dashed line). 'Year'
 #'   could be some other time step.
@@ -726,7 +730,8 @@ plotmat <- function(inm,xlab="years",ylab="",legloc="topright") {
 #' plotstand(out, bars=TRUE, P=90,geo=100.0,usefont=1)
 #' plotstand(out)
 #' }
-plotstand <- function(stnd,bars=FALSE,geo=0.0,P=95,catch=NA,usefont=7) {
+plotstand <- function(stnd,bars=FALSE,geo=0.0,P=95,catch=NA,usefont=7,maxy=NA,
+                      miny=0) {
   result <- stnd$Results
   if (geo > 0.0) result <- stnd$Results*geo
   sterr <- stnd$StErr
@@ -745,14 +750,18 @@ plotstand <- function(stnd,bars=FALSE,geo=0.0,P=95,catch=NA,usefont=7) {
     Zmult <- -qnorm((1-(P/100))/2.0)
     lower <- result[,optimum] * exp(-Zmult*sterr[,optimum])
     upper <- result[,optimum] * exp(Zmult*sterr[,optimum])
-    ymax <- max(result[,1],result[,optimum],upper,na.rm=TRUE)*1.025
+    ifelse(is.na(maxy),
+        ymax <- max(result[,1],result[,optimum],upper,na.rm=TRUE)*1.025,
+        ymax <- maxy)
   } else {
-    ymax <- max(result[,1],result[,optimum],na.rm=TRUE)*1.025
+    ifelse(is.na(maxy),
+           ymax <- max(result[,1],result[,optimum],na.rm=TRUE)*1.025,
+           ymax <- maxy)
   }
   if (length(catch) > 1) par(mfrow= c(2,1)) else par(mfrow= c(1,1))
   par(mai=c(0.4,0.5,0,0), oma=c(0,0,0.25,0.25))
   par(cex=0.85, mgp=c(1.5,0.3,0), font.axis=usefont)
-  plot(yrs,result[,1],type="l",lty=2,lwd=2,ylim=c(0,ymax),yaxs="i",ylab="",
+  plot(yrs,result[,1],type="l",lty=2,lwd=2,ylim=c(miny,ymax),yaxs="i",ylab="",
        xlab="",xaxs="r",panel.first=grid())
   lines(yrs,result[,optimum],lwd=3)
   if (bars) {
@@ -896,7 +905,8 @@ qqdiag <- function(inmodel,plotrug=FALSE,bins=NA,hline=0.0,
       loy <- min(resids); hiy <- max(resids)
       scale <- trunc(100*(hiy - loy)/35) / 100
       loy <- round(loy - (scale/2),2); hiy <- round(hiy + scale,2)
-      bins <- seq(loy,hiy,scale)
+      tmp <- seq(loy,hiy,scale)
+      bins <- seq(loy,hiy,length=length(tmp))
    } else {
       loy <- min(bins); hiy <- max(bins)
    }

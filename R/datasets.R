@@ -9,7 +9,7 @@
 #'    The cpue and log(cpue) can be calculated from this data.
 #'
 #' @format A data frame with 10603 x 10 variables:
-#' \itemize{
+#' \describe{
 #'   \item{Year}{The year in which fishing takes place}
 #'   \item{Month}{The month in which fishing took place}
 #'   \item{Vessel}{a code uniquely identifying vessels through time}

@@ -100,7 +100,7 @@ checkDF <- function(x) {  # x <- sps1
 #' @param inout is a outce object such as produced by standLM
 #'
 #' @return a matrix containing the optimum model parameters,
-#' @exportMethod coef.outce
+#' @export coef.outce
 #' @examples
 #' \dontrun{
 #'  data(sps)
@@ -112,13 +112,13 @@ checkDF <- function(x) {  # x <- sps1
 #'  coef(out)
 #' }
 coef.outce <- function(inout) {   # S3 class development
-   test <- dim(inout$Parameters$mat)
+   test <- dim(inout$parameters$mat)
    if (length(test) > 0) {
       warning("The input object is not an 'outce' object from standLnCE  \n")
    } else {
       ans <- NA
       cat("Output from standLnCE  \n")
-      tmp <- inout$Parameters$coefficients
+      tmp <- inout$parameters$coefficients
       backTran <- exp((tmp[,"Estimate"] + (tmp[,"Std. Error"]^2)/2))
       ans <- cbind(tmp,backTran)
       colnames(ans)
@@ -208,7 +208,9 @@ getaav <- function(invect,narm=TRUE) { # invect=cbby[,1]; narm=TRUE
 #'
 #' @return a matrix containing the parameters for invar
 #' @export
-getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=outB; invar="pBlue";biascorrect=TRUE
+getfact <- function(inmat,invar,biascorrect=TRUE) {  
+  # inmat=yrcoef;invar="numdivers";biascorrect=TRUE
+  # inmat=out;invar="propindex";biascorrect=TRUE
    allowable <- c("matrix","array","outce","lm","gam")
    whatclass <- class(inmat)
    if (length(whatclass) > 2) {
@@ -225,27 +227,31 @@ getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=outB; invar="pBlue"
    if (length(whatclass) == 2) whatclass <-  whatclass[1] # for R4 matrices
    if (whatclass %in% allowable) {
       if ((whatclass == "matrix") | (whatclass == "array")) pardat <- inmat
-      if (whatclass == "outce") pardat <- inmat$Parameters$coefficients
+      if (whatclass == "outce") pardat <- inmat$parameters$coefficients
       if (whatclass == "lm") pardat <- summary(inmat)$coefficients
       if (whatclass == "gam") pardat <- summary(inmat)$p.table
    } else {
       stop("Input matrix is not, in fact, a matrix of coefficients")
    }
-   pick <- grep(invar,rownames(pardat))
-   if (length(pick) == 0) stop("The selected factor is not in the selected model!  \n")
-   startmat <- pardat[pick,]               # isolate rows containing variable in question
+   pick <- grep(invar,rownames(pardat))   # isolate rows containing variable in question
+   numrow <- length(pick)
+   rows <- rownames(pardat)[pick]
+   columns <- colnames(pardat)
+   if (numrow == 0) stop("The selected factor is not in the selected model!  \n")
+   startmat <- matrix(pardat[pick,],nrow=numrow,ncol=4,dimnames=list(rows,columns))             
    pickI <- grep(":",rownames(startmat))  # check for interaction terms and split off
    if (length(pickI) > 0) {               # if present
       intermat <- startmat[pickI,]
       startmat <- startmat[-pickI,]
    }
+   numvar <- nrow(startmat)
    lnce <- startmat[,"Estimate"]         # first do the non-interaction terms
    se <- startmat[,"Std. Error"]
    tval <- startmat[,"t value"]
    if (length(grep("Pr(>|t|)",colnames(startmat))) > 0) {
      Prob <- startmat[,"Pr(>|t|)"]
    } else {
-     Prob <- NA
+     Prob <- rep(NA,numvar)
    }
    if (biascorrect) {
       backtran <- exp(lnce + (se * se)/2)
@@ -257,7 +263,7 @@ getfact <- function(inmat,invar,biascorrect=TRUE) {  # inmat=outB; invar="pBlue"
                 c(NA,tval),c(NA,Prob)
    )
    colnames(ans) <- c("Coeff","SE","LogCE","Scaled","t value","Prob")
-   rownames(ans)[1] <- invar
+   rownames(ans) <- c(invar,rows)
    norigvar <- dim(ans)[1]
    if (length(pickI) > 0) {              # do interaction terms if they exist
       terms <- unlist(strsplit(rownames(intermat),":"))
@@ -811,7 +817,7 @@ standLM <- function(inmods,indat,inlab="",console=TRUE){
 #'   \item{All parameters}{The un-back-transformed parameters for the complete
 #'     optimum model}
 #' }
-#' @exportMethod summary.outce
+#' @export summary.outce
 #' @examples
 #' \dontrun{
 #'  data(sps)
@@ -839,7 +845,7 @@ summary.outce <- function(x) {
    print(x$Optimum)
    cat("\n")
    cat("All Un-backtransformed parameters from the optimum model \n")
-   print(x$Parameters$coefficients)
+   print(x$parameters$coefficients)
 } # end of summary.outce
 
 #' @title tapsum simplifies the use of tapply for summarizing variables
