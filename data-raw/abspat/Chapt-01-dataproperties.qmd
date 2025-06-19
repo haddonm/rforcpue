@@ -1,0 +1,299 @@
+# Properties of candidate spatial performance measures {#sec-chapter1}
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| cache: false
+
+source("_common.R")
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+## Load KUD objects
+
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+all_kud_data <- readRDS(file.path(datadir, "AllKud75_production_2021.rds"))
+
+#all_kud_data <- readRDS(file.path(datadir, "Climate_sfkud_2023_03_07.RDS") 
+
+
+all_kud_data <- all_kud_data %>% 
+  within({
+   blockno[subblockno == "05D"] <- 6
+   subblockno[subblockno == "05D"] <- "06A"
+   
+  })
+
+
+## Docketbook data - Most recent
+abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+#abCEgl <- readRDS("C:/Users/cmundy/Dropbox/AbaloneData/Climate_logbook_gl_2023_03_07.RDS")
+
+
+abCEbl <- abCEbl %>% within({
+  zone <- newzone
+})
+
+
+```
+
+## Introduction
+
+### Review of classic and spatial effort variables
+
+One of the primary motivations for pursuing the passive GPS and depth data logger concept was to improve the consistency and quality of how fishing effort is captured. Weather conditions are a strong determinant of where fishers choose to dive, and only rarely are conditions perfect. There may also be multiple dives over a section of coast, making the fishers task of estimating total diving effort at the end of the day challenging.  In addition, different divers have different ideas of what counts as fishing effort. Thus, we expect effort recorded in divers’ fishing docket books to be an approximation. The GPS logger program provides two forms of effort: 
+
+- Diving time, accurately measured by the automatic depth data logger
+- Area, as measured by the area of the vessel footprint for each dive
+
+Of interest is whether these variables are correlated with the measure of effort (hours fished) recorded by fishers on the docket returns. Understanding the degree of correlation will provide insights into whether earlier estimates of catch-rates might potentially be biased in a particular manner.
+
+This chapter links to Objective 1: **Characterise the statistical properties, consistency, interpretability and assumptions of spatial and classic indicators of fishery performance.**
+
+## Methods
+
+Two reporting blocks in the Tasmanian abalone fishery are used as contrasting case studies - Block 6 in the north west, and Block 21 in the south-east. The fishery in Block 6 has declined rapidly over the past 10 years, although with \~90% reductions in TACC, the fishery has recently shown increases in catch-rates indicating a degree of rebuilding. Block 21 in the south-east was rebuilding at the start of the time-series, however its fishery was substantially impacted by two external events in 2016; the first was the most significant marine heat wave recorded in recent times [@oliver2017], and the second was a significant storm generating the largest easterly swells on record. Nevertheless, from 2017, stocks appeared to continue rebuilding through to 2021. These two blocks provide contrasting trends in fishery performance as a way to examine the behaviour of the modelling approach under different circumstances.
+
+A simple graphical comparison of the distribution of daily effort (dive time) derived from docket books and GPS/depth data loggers is used to illustrate the relationship, and examine how each form of effort estimate relates to other variables such as area and maximum extent of the dive polygon, and to daily catch.
+
+## Results
+
+### How accurate are Tasmanian abalone fisher Docketbook effort records?
+
+Calculations of the percent difference between Docketbook estimates of effort recorded by divers and precise estimates of effort recorded by passive depth data loggers, suggests that Tasmanian commercial abalone divers provide surprisingly accurate estimates of actual fishing effort given the difficulties of working from small runabout fishing vessels ([@fig-effort-diff]). The proportion of docket records with ± 25% of the GPS estimates is over 80% in both blocks ([@tbl-effort-diff]), giving a degree of confidence in the Docketbook estimates of fishing effort. The discrepancy between docket and logger estimates of effort are used to filter data before final use for spatial Performance Measures. Where both GPS and depth data logger data are available and electronic measure of effort is consistent with the docket record of effort, those records are retained. Where GPS data is present and depth data are absent, those GPS data are processed with track classification algorithm to create a virtual depth data stream, and appended to the full data set. Where GPS data are missing but depth data are present, those data are removed from further analyses. 
+
+Data loss can exert a potential bias depending on whether the origins are human failure or hardware failure. Where there is a hardware failure, logger sets were replaced and the faulty units repaired and returned to a pool of spare units. Where there is human failure such as consistently forgetting to turn loggers on, or forgetting to charge units prior to fishing days there is the potential for bias in capture of fishing effort where we will achieve a lower coverage of data from fishers that are less diligent. There are multiple triggers for correct use of loggers, including reporting the serial ID of the logger hardware being used on the daily fisher returns, and a question in the pre-fishing phone report that asks the fishers to confirm that the loggers are charged and turned on. Hardware failure is the dominant cause of data loss, and we expect that to be unbiased with respect to fisher and region.
+
+Marginal plots of the relationship between Docketbook effort and logger effort provide support for a relatively close relationship between Docket Book and logger forms of fishing effort (time) in both Block 6 and Block 21 ([@fig-effort-concord-6], [@fig-effort-concord-21]). The scatter of points well below the line (in sub-plot 'a' in both cases) indicates days where there is proportionally short logger time compared to Docket Book time. These are primarily due to low battery or hardware failure, although are relatively minor occurrences (e.g. @fig-effort-concord-6 a). 
+
+Fishing effort recorded in docket returns is often rounded to the nearest half hour or hour, and occurs across the full range of daily fishing effort (@fig-effort-concord-6 (a), @fig-effort-concord-21 (a)), regardless of whether the fishing day was short or long. The relationship between area and time is non-linear, with increasing variance as area or effort increase (@fig-effort-concord-6 (c), @fig-effort-concord-21 (c)). The area of the dive polygon is linearly correlated with the maximum linear extent, indicating that either of these two variables would have a similar effect in a statistical model (@fig-effort-concord-6 (d), @fig-effort-concord-21 (d)).
+
+```{r }
+#| fig-cap: "Distribution of percent time differences between daily effort reported from divers Docketbooks and the GPS/depth dataloggers. Orange vertical lines indicate region of 75% and 125% differences."
+#| label: fig-effort-diff
+#| fig-width: 7
+#| fig-height: 7
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+## sum effort etc by day
+## NOTE: this analysis doesn't run on a per dive basis
+logreffort <- all_kud_data %>% 
+  filter((zone == "N" & blockno == 6) | (zone == "E" & blockno == 21)) %>%
+  #filter(zone %in% c("N", "E") & blockno %in% c(6, 21)) %>% 
+  group_by(zone, blockno, diver_id, plaindate) %>% 
+  summarise(logrtime = sum(effort_mins, na.rm=T),
+            lograrea = sum(poly_area, na.rm=T),
+            logrdist = sum(maxdist, na.rm=T),
+            logrcatch = sum(catch_bl, na.rm=T))
+
+
+
+dockeffort <- abCEbl %>%
+    within({
+    diver_id <- factor(diver_id)
+    }) %>% 
+  filter((zone == "N" & blockno == 6) | (zone == "E" & blockno == 21)) %>%
+  #filter(zone %in% c("N", "E") & blockno %in% c(6, 21)) %>%
+  group_by(zone, diver_id, blockno, plaindate) %>%
+  summarise(docktime = sum((hours*60), na.rm = T),
+            dockcatch = sum(catch, na.rm = T))
+
+
+effort <- left_join(dockeffort, logreffort, by = join_by(zone == zone, blockno==blockno, plaindate == plaindate,  diver_id == diver_id)) %>% filter(!is.na(logrtime))
+
+effort <- effort %>% within({
+  blocknoF <- as.factor(blockno)
+  timediff <- docktime/logrtime
+  pctimediff <- docktime/logrtime*100
+})
+
+
+effort %>% filter(pctimediff < 200) %>% ggplot(aes(x = pctimediff, fill = blocknoF)) +
+  geom_histogram(position = 'identity') +
+  scale_fill_manual(values = c("#69b3a2", "#404080")) +
+  geom_vline(xintercept = c(75, 125), colour = "orange") +
+  facet_wrap(~ blockno) +
+  theme_bw()
+```
+
+\newpage
+
+```{r gt_table}
+#| label: tbl-effort-diff
+#| tbl-cap: "Distribution of differences between daily effort reported from divers Docketbooks and the GPS/depth dataloggers. Notes: allrecs = all matching records; Recs25 = proportion of records where logger time was within 25% of the docket time; pc25 = Recs25 as a fraction of total records."
+#| echo: false
+#| warning: false
+#| message: false
+
+# how many days where logger time is within 25% of docket time
+diff_within_25 <- effort %>%
+  group_by(blockno) %>%
+  mutate(pm25 = ifelse(between(pctimediff, 75, 125), 1, 0)) %>%
+  summarize(allRecs = n(),
+            Recs25  = sum(pm25)) %>%
+  mutate(pc25 = Recs25/allRecs) %>% 
+  collect
+
+pc25tab <- diff_within_25 |> gt() |>  fmt_percent(columns = pc25, decimals = 1) 
+
+# |> tab_caption("Distribution of differences between daily effort reported from divers Docketbooks and the GPS/depth dataloggers. Orange vertical lines indicate 75% and 125%")
+pc25tab |> knitr::knit_print()
+
+```
+
+```{r}
+#| label: fig-effort-concord-6
+#| fig-cap: "Relationship between different measures of effort for Block 6, Tasmanian Northern Zone. a) docktime vs logrtime - relationship between daily effort (minutes) from docket and logger; b) docktime vs lograrea - relationship between docket effort and dive polygon area; c) lograrea vs logrtime - relationship between logger area and logger time; d) lograrea vs logrdist - relationship between logger area and logger distance."
+#| fig-width: 6
+#| fig-height: 6
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+effortN6 <- filter(effort, blockno == 6 & docktime < 600) 
+
+eff1 <- ggplot(effortN6, aes(docktime, logrtime)) + geom_point(alpha = .25) + theme_bw() + geom_abline(intercept =0 , slope = 1) + xlim(0,max(effortN6$docktime))+ylim(0,max(effortN6$logrtime))
+eff1_M <- ggMarginal(eff1, type = "histogram")
+
+eff2 <-  ggplot(effortN6, aes(docktime, lograrea)) + geom_point(alpha = .25) + theme_bw()
+eff2_M <- ggMarginal(eff2, type = "histogram")
+
+eff3 <-  ggplot(effortN6, aes(lograrea, logrtime, group=blockno)) + geom_point(alpha = .25) + theme_bw() 
+eff3_M <- ggMarginal(eff3, type = "histogram")
+
+eff4 <-  ggplot(effortN6, aes(lograrea, logrdist, group=blockno)) + geom_point(alpha = .25) + theme_bw()
+eff4_M <- ggMarginal(eff4, type = "histogram")
+
+plot_grid(eff1_M, eff2_M, eff3_M, eff4_M, nrow= 2, labels = "auto")
+
+
+```
+
+```{r}
+#| label: fig-effort-concord-21
+#| fig-cap: "Relationship between different measures of effort for Block 21, Tasmanian Eastern Zone. a) docktime vs logrtime - relationship between daily effort (minutes) from docket and logger; b) docktime vs lograrea - relationship between docket effort and dive polygon area; c) lograrea vs logrtime - relationship between logger area and logger time; d) lograrea vs logrdist - relationship between logger area and logger distance."
+#| fig-width: 6
+#| fig-height: 6
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+effortE21 <- filter(effort, blockno == 21 & docktime < 600) 
+
+eff1 <- ggplot(effortE21, aes(docktime, logrtime)) + geom_point(alpha = .25) + theme_bw() + geom_abline(intercept =0 , slope = 1) + xlim(0,max(effortE21$docktime))+ylim(0,max(effortE21$logrtime))
+eff1_M <- ggMarginal(eff1, type = "histogram")
+
+eff2 <-  ggplot(effortE21, aes(docktime, lograrea)) + geom_point(alpha = .25) + theme_bw()
+eff2_M <- ggMarginal(eff2, type = "histogram")
+
+eff3 <-  ggplot(effortE21, aes(lograrea, logrtime, group=blockno)) + geom_point(alpha = .25) + theme_bw() 
+eff3_M <- ggMarginal(eff3, type = "histogram")
+
+eff4 <-  ggplot(effortE21, aes(lograrea, logrdist, group=blockno)) + geom_point(alpha = .25) + theme_bw()
+eff4_M <- ggMarginal(eff4, type = "histogram")
+
+plot_grid(eff1_M, eff2_M, eff3_M, eff4_M, nrow= 2, labels = "auto")
+
+
+```
+
+\newpage
+#### Relationship between catch and time by data type
+
+Catch broadly increases with fishing time (logger) in both blocks (@fig-time-catch-6, @fig-time-catch-21). Banding of the fishing time from Pocketbooks can be seen in plot b) again for both blocks (@fig-time-catch-6, @fig-time-catch-21), whereas catch appears as a continuous variable with no categorisation. This is expected given that catch is weighed to the nearest kilogram at the boat ramp (or jetty), during the transfer process from diver to processor. Although, all catch weight values in this study (and in the annual fishery assessment) are estimated weights, the fishers are much more adept and highly accurate at estimating weight of catch from each sub-block visited over the fishing day.
+```{r}
+#| label: fig-time-catch-6
+#| fig-cap: "Relationship between catch and effort (logger time and docket time ) for Block 6, Northern Zone; a) logger effort (minutes) and catch (kilograms), b) Docketbook effort (minutes) and catch (Kilograms).  Note: daily catches > 1550Kg removed."
+#| fig-width: 6
+#| fig-height: 6
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+catch1 <- filter(effort, blockno == 6 & docktime < 600 & logrcatch < 1550) %>%  ggplot(aes(logrtime, logrcatch)) + geom_point(alpha = .25) + theme_bw()
+cc1_M <- ggMarginal(catch1, type = "histogram")
+
+
+catch2 <- filter(effort, blockno == 6 & docktime < 600 & logrcatch < 1550) %>% ggplot( aes(docktime, dockcatch)) + geom_point(alpha = .25)+ theme_bw()
+cc2_M <- ggMarginal(catch2, type = "histogram")
+
+
+plot_grid(cc1_M, cc2_M, nrow= 1, labels = "auto")
+
+```
+
+
+
+```{r}
+#| label: fig-time-catch-21
+#| fig-cap: "Relationship between catch and effort (logger time and docket time ) for Block 21, Eastern Zone; a) logger effort (minutes) and catch (kilograms), b) Docketbook effort (minutes) and catch (Kilograms"
+#| fig-width: 6
+#| fig-height: 6
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+catch3 <- filter(effort, blockno == 21& docktime < 600) %>% ggplot(aes(logrtime, logrcatch)) + geom_point(alpha = .25) + theme_bw()
+cc3_M <- ggMarginal(catch3, type = "histogram")
+
+
+catch4 <- filter(effort, blockno == 21 & docktime < 600) %>% ggplot(aes(docktime, dockcatch)) + geom_point(alpha = .25)+ theme_bw()
+cc4_M <- ggMarginal(catch4, type = "histogram")
+
+
+plot_grid( cc3_M, cc4_M, nrow= 1, labels = "auto")
+
+```
+
+#### Relationship between catch and area 
+
+There is considerable variation in the catch-dive area relationship in both block 6 and block 21 (@fig-area-catch). This reflects high levels of variation among locations, fishing days, fishers, and state of the fishery at the time of fishing.
+
+```{r}
+#| label: fig-area-catch
+#| fig-cap: "Relationship between reported Docketbook daily catch (dockcatch) and daily area from GPS loggers (lograrea) for Blocks  6 and 21; a) Block 6 logger area (square metres) and daily catch (kilograms), b) Block 21  logger area (square meters) and catch (Kilograms).  Note: daily catches > 1550Kg removed."
+#| fig-width: 6
+#| fig-height: 6
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+catch5 <- filter(effort, blockno == 6 & docktime < 600 & logrcatch < 1550) %>%  ggplot(aes(lograrea, logrcatch)) + geom_point(alpha = .25) + theme_bw()
+cc5_M <- ggMarginal(catch5, type = "histogram")
+
+
+catch6 <- filter(effort, blockno == 21 & docktime < 600 & logrcatch < 1550) %>% ggplot( aes(lograrea, dockcatch)) + geom_point(alpha = .25)+ theme_bw()
+cc6_M <- ggMarginal(catch6, type = "histogram")
+
+
+# ccplot <- (wrap_elements(cc5_M) + wrap_elements(cc6_M))
+# 
+# ccplot + plot_annotation(tag_levels = 'a') 
+
+plot_grid(cc6_M, cc6_M, nrow= 1, labels = "auto")
+
+```
+
+
+## Discussion
+
+The Tasmanian abalone divers on the whole are providing relatively accurate estimates of fishing effort when recording hours fished on their daily Docket returns. Being mindful of the challenges of remembering how much time was spent underwater on each dive, and in each sub-block at the end of the day, the differences between the fisher memory (docket) and automatic logger (depth logger) estimates of fishing time were much less than thought likely. There is a risk that this high level of agreement (excluding biased records due to logger failure) is influenced by the knowledge that effort is being recorded electronically, leading fishers to be more careful with estimating there effort. Most Tasmanian abalone fishers have been using dive computers for the past two decades, and in most instances it assists them with estimating total hours in the water for their Docket returns. Thus, there is a level of confidence that we can infer a level of accuracy in effort reporting for the period prior to the introduction of GPS and depth datalogger hardware.
+
+The agreement between diver and logger estimates of effort, despite clear patterns of rounding, provides confidence that the Docket returns from fishers contain meaningful estimates of their fishing effort. This is an important conclusion from this study in that there is now greater confidence in the longer time-series of catch and effort data available from the Docket records, while a time-series of logger based measures of effort is developed. It is also clear that relationships between several variables (fishing time, area, distance, catch) are either non-linear, and with increasing variance with increasing magnitude of the variables. This is a clear indication that there are other factors that influence daily catch in addition to effort. These will include human variables such as knowledge of the coast, experience of the deckhand, and also, physical conditions such as sea conditions, wind, etc).  There is also likely to be a contribution from small- and regional-scale variation in abundance, and prior fishing activity at the dive site. These issues are explored further in the remaining chapters. 

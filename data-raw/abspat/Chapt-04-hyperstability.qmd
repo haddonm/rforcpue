@@ -1,0 +1,1489 @@
+# Quantifying hyperstability in abalone catch and effort data {#sec-chapter4}
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| cache: false
+
+source("_common.R")
+library(patchwork)
+library(mixedup)
+
+```
+
+```{r, echo=FALSE}
+## Function for plotting power curves
+## For hyperstability plots
+##  Creates a series of curves to illustrate lambda
+
+pwr <- function(x) a*x^lbda
+
+x <- 1:500
+
+lbda <- 1
+a <- 1
+dat_lbda1 <- data.frame(x, y = pwr(x),lbda = "Assumed")
+
+lbda <- 0.85
+a <- 2.51
+dat_lbda85 <- data.frame(x, y = pwr(x),lbda = "Spatial")
+
+
+ lbda <- 0.5
+ a <- 17
+ dat_lbda5A <- data.frame(x, y = pwr(x),lbda = "Hyper")
+
+
+lbda <- 0.5
+a <- 22.25
+dat_lbda5 <- data.frame(x, y = pwr(x),lbda = "Hyperstable")
+
+
+lbda_dat <- bind_rows(dat_lbda1, dat_lbda85, dat_lbda5, dat_lbda5A) %>% 
+ mutate(lbda = as.factor(lbda))
+```
+
+```{r, echo=FALSE}
+#| cache: false
+#| warning: false
+#| message: false
+
+## set datadir
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+
+## load SAUmaster index
+saumaster_bl <- readxl::read_xlsx(file.path(datadir, "SAU_Master.xlsx"))
+
+
+
+## Load KUD objects
+
+all_kud_data <- readRDS(file.path(datadir, "AllKud75_production_2021.rds"))
+
+
+#all_kud_data_climate <- readRDS(file.path(datadir, "Climate_sfkud_2023_03_07.RDS")) 
+
+
+# kud_centroid <- all_kud_data %>% st_centroid() 
+# xy <- st_coordinates(kud_centroid) %>% 
+#   data.frame() %>% 
+#   setNames(c("easting", "northing"))
+# all_kud_data <- cbind(all_kud_data, xy)
+
+all_kud_data <- all_kud_data %>% 
+  filter(year(plaindate) > 2011) %>% 
+  within({
+   blockno[subblockno == "05D"] <- 6
+   subblockno[subblockno == "05D"] <- "06A"
+   
+  }) %>% 
+  left_join(saumaster_bl, 
+                    by = c("zone" = "newzone" , "blockno", "subblockno"))
+
+all_kud_data$SAU <- all_kud_data$SAU_CREF
+
+
+## Load Docketbook data - Most recent
+abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+#abCEgl <- readRDS("C:/Users/cmundy/Dropbox/AbaloneData/Climate_logbook_gl_2023_03_07.RDS")
+
+
+abCEbl <- abCEbl %>% within({
+  zone <- newzone
+}) %>% left_join(saumaster_bl, 
+                    by = c("zone" = "newzone", "blockno", "subblockno")) %>% 
+  filter(fishyear < 2023)
+
+abCEbl$SAU <- abCEbl$SAU_CREF
+
+source("aggregateDiveData.R")
+source("SAU_stndFuns.R")
+```
+
+```{r}
+l_day <-
+  l_day_data %>% filter(SAU %in% c("SAU5", "SAU21", "SAU13") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+l_day <- l_day %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+l_day_list <- split(l_day, l_day$SAU)
+
+
+d_day <-
+  d_day_data %>% filter(#zone %in% c("W", "E") & blockno %in% c(12, 21, 29) &
+                            SAU %in% c("SAU5", "SAU21", "SAU13") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+d_day <- d_day %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+d_day_list <- split(d_day, d_day$SAU)
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+mod1_ltime <- map2(l_day_list, "logrtime", stnd_fun_lme4)
+mod1_dtime <- map2(d_day_list, "docktime", stnd_fun_lme4)
+mod2_ltime <- map2(l_day_list, "logrtime", hyperst_fun_lme4)
+mod2_larea <- map2(l_day_list, "lograrea", hyperst_fun_lme4)
+```
+
+## Introduction
+
+Hyperstable catch rates are widely assumed to feature in most wild fisheries around the world [@harley2001], and is often cited as a justification for interpreting catch rates with caution, or relying heavily on fishery independent survey (FIS) data sets. FIS data are largely collected systematic along an experimental design and eliminate some of the biases in fishery-dependent data. FIS data collection can also be subject to hyperstability associated with density-dependence of the target species [@kotwicki2014], but avoid the potential effect of diver and fleet behaviour that might create a bias in a fishery-dependent catch rate signal. Behaviour of the target species, for example aggregating behaviour [@rose1999] is another key driver. Changes in the way fishers operate can be difficult to quantify, although @hamilton2016 were able to combine FIS with fishery dependent data to quantify hyperstability in a tropical reef fishery. Classical serial depletion is another driver of hyperstable catch rates, for example switching to a new species as abundance of one species declines has been a feature in early fisheries, including the Californian abalone fishery [@karpov2000]. Travelling further as fishing grounds close to port become depleted is another form of spatial serial depletion resulting in hyperstable catch rates [@cardinale2011], though is relatively uncommon in mature fisheries.
+
+While hyperstable catch rates are often acknowledged, and occasionally described [see Figure 1 in @harley2001], hyperstable catch rates are rarely quantified in a commercial wild harvest fishery. Documentation of hyperstable catch rates however, is becoming more common in recreational fisheries [e.g. @ward2013]. When hyperstable catch rates are described typically it is in the form of a power curve that describes a non-linear relationship between the index of abundance (catch rate) and biomass (e.g. @fig-hyperstable-hypo1). When fishery-dependent indices of abundance such as CPUE is used to estimate biomass, the effect is that lower catch rates over-estimate remaining biomass. The challenge of confirming the existence of, and quantifying hyperstability in fishery catch rates is problematic whether using catch rate as an index of relative abundance directly in Empirical Harvest Strategies, or, as an index of relative abundance when conditioning integrated assessment models. The solution for Empirical Harvest Strategies is to be more precautionary, while assessment models can include a hyperstability coefficient and, examine the impact of that coefficient on model fits.
+
+In well established abalone fisheries, rather than the typical form of hyperstability such as species switching, or serial depletion of fishing grounds, it is the capacity of divers to change their fishing behaviour to maintain a catch rate that is of greatest concern. Tasmanian abalone divers have long expressed frustration with reliance on time as a measure of effort, and frequently advised that they changed their fishing behaviour (usually swim speed) to maintain catch rates. Aggregation of adult abalone will be a factor in some abalone fisheries, for example fishers in the Tasmanian Western Zone blacklip fishery target aggregations, where has fishers in the Tasmanian Eastern Zone blacklip fishery are skimming and picking up individual animals as they traverse the reef. Whether this is a habitat driven pattern, or a function of the relative health of these two blacklip fisheries remains unclear.
+
+Traditionally, we measure effort as time and model CPUE (ratio of catch and time) as the response variable against a number of likely predictors. Divers frequently comment that while catch per unit effort (CPUE) remains stable, they are covering more reef area in the same dive time to get their target catch. This common description of change in fishing behaviour in response to declining abalone abundance should be detectable by considering the spatial extent of each dive event. The spatial data collected in the Tasmanian passive GPS data logger program allows us to estimate two spatial forms of effort - the first being the reef area covered by the vessel, and the second being the maximum extent (linear distance) covered by the vessel during a dive as proxies for the area being fished by the diver. Dive polygon area and dive polygon length are highly correlated (@sec-chapter1), and in these analyses result in almost identical trend lines. Here we use dive polygon area as a measure of effort to contrast with dive time as a measure of effort from both the GPS logger program and dive time recorded on the Docket book data.
+
+This chapter links to two objective:
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.** Objective 3: **Identify methods for detecting hyperstability in CPUE.**
+
+```{r}
+#| label: fig-hyperstable-hypo1
+#| fig-cap: "Hypothetical relationship between Biomass and CPUE, where CPUE is assumed to be an index of relative abundance [ e.g. @harley2001, Figure 1]). The black line (Assumed) represents the assumed relationship where the index is proportional to abundance, while the red line (Hyperstable) represents a non-linear hyperstable relationship between the index and actual abundance. "
+#| fig-width: 7
+#| fig-height: 7
+
+p <-
+ filter(lbda_dat,
+        #lbda %in% c("Assumed", "Hyperstable", "Spatial", "Hyper")) %>%
+        lbda %in% c("Assumed", "Hyperstable")) %>%
+         ggplot(aes(
+  x = x,
+  y = y,
+  group = lbda,
+  colour = lbda
+ )) +
+ geom_point(size = 1) +
+ scale_color_manual(values = c(
+  "Assumed" = "black",
+  "Spatial" = "green",
+  "Hyperstable" = "red",
+  "Hyper" = "red"
+ )) +
+ theme_light() +
+ theme(
+  text = element_text(size = 16),
+  axis.text = element_blank(),
+  legend.title = element_blank()
+ )
+
+
+pwr_plot_literature <- update_labels(p, list(x = "Abundance/Biomass", y = "Catch Rate"))
+
+pwr_plot_literature
+
+
+## savedir <- "C:/Users/cmundy/OneDrives/OneDrive - University of Tasmania/Research/Presentations/Conferences/IntAbSymp/IAS2023"
+#ggsave(file.path(savedir, "Biomass_index_literature.svg"), pwr_plot_literature, device = "svg", width = 12, height = 10, units = "cm")
+
+```
+
+## Methods
+
+Three SAUs in the Tasmanian abalone fishery are used as contrasting case studies - SAU5 in the north-west, SAU21 in the East, and SAU13, the most productive SAU in the south- east. SAU5 is highly spatially structured with variable growth, and has declined rapidly over the past 10 years. With \~90% reductions in TACC, this fishery has recently shown indications of rebuilding. SAU21 in the south-east was rebuilding at the start of the time-series, declined sharply due to two external events in 2016; the most significant marine heat wave recorded in recent times [@oliver2017], and a significant storm generating the largest easterly swells on record. From 2017, stocks appeared to keep rebuilding through to the end of the time-series used here (2021). SAU13 is the most productive region (Actaeons) in the Tasmanian blacklip abalone region, and currently accounts for more than 60% of the Eastern Zone TACC. This SAU has been slowly rebuilding over this time-series. These three SAUs provide contrasting trends in fishery performance as a way to examine consequences of using different forms of effort to estimate fishery performance.
+
+In Chapter 2, we outlined our standardisation approach modelling catch as a function of effort (Mod1 below).
+
+```{r Mod1, echo = TRUE}
+
+Mod1 <- log(catch) ~ offset(log(time))  +
+        fishyear +
+        (1 | subblockno) +
+        (1 | subblockno:fishyear) +
+        (1 | diver_id) +
+        (1 | fishmonth)
+
+```
+
+To contrast the effort required to achieve a nominal amount of catch (100kg), the effort and catch terms are reversed in the statistical model. Using this approach we are able to ask the question, what is the change in effort through time required to achieve 100kg of catch? The statistical model is then given by Mod2.
+
+```{r Mod2, echo = TRUE}
+Mod2 <- log(time) ~ offset(log(catch))  +
+        fishyear +
+        (1 | subblockno) +
+        (1 | subblockno:fishyear) +
+        (1 | diver_id) +
+        (1 | fishmonth)
+```
+
+To provide a comparison with traditional catch rate modelling, both Mod1 and Mod2 are applied to our case study SAUs. Mod1 is applied to both GPS logger and Docket book estimates of dive time (effort). Bias-corrected geometric mean catch-rates are usually presented when catch-rates are not standardised, but for simplicity here crude catch rate is calculated as total catch / total effort across all dives in each year, and included as a rough yardstick.
+
+The first comparison is simply time as effort from two different sources:
+
+-   diver Docket book time (minutes)
+-   GPS program time (minutes)
+
+Secondly we consider a comparison of effort represented as either dive area or dive time, and compared using mod2:
+
+-   GPS logger dive time (minutes)
+-   GPS dive polygon area (meters^2^)
+
+The datasets were restricted to the years 2012-21 for both GPS and Docket book datasets. To provide a reasonable comparison, both spatial and docket datasets operate on a per diver/day basis. For spatial data, individual dive metrics (area, dive time, catch) are aggregated to the scale of day.
+
+A log-normal model was fitted using R [@base] and the glmmTMB package [@glmmTMB], and summary figures produced using the tidyverse suite of R packages [@tidyverse]. Data were batch processed using custom analysis functions and the purrr package [@purrr]. We use predict functions to back-cast the mean change in effort required to achieve 100kg of catch in each year of the time-series.
+
+## Results
+
+### Case study 1: SAU5
+
+Fishery performance in SAU5 as assessed using the typical approach of catch as a function of effort (in this case 1 hour of dive time) identifies a sharp decline in catch rate from 2012 through 2018, and then a rebuilding catch rate from 2019 through 2021 ([@fig-cpue-B5]A). Mean annual catch rates using time as a measure of effort from GPS logger and Docket book datasets are very similar ([@fig-cpue-B5]A). Catch rates for both datasets decline by around 50% between 2012 and 2018. Crude catch rate follows a similar pattern to the standardised catch rates, with the greatest deviation when catch rates are low (2015-19).
+
+Modelling effort as a function of catch (effort \~ catch) identifies an inverse pattern to mean catch rate trends (catch \~ offset(effort)). Substantial differences in estimated mean effort are required to achieve 100kg of catch by the two forms of effort - time, area ([@fig-cpue-B5]B). As the fishery declines between 2012 and 2018, the dive time increases twofold, whereas over the same time-period the reef area required to catch 100kg is four times greater in 2018 compared to 2012 ([@fig-cpue-B5]B). As the fishery improves between 2019 and 2021, the effort required to achieve 100kg of catch return to similar values observed in 2012, for both forms of effort.
+
+```{r}
+#| echo: false
+mod1_ltime_5 <- mod1_ltime$SAU5
+mod1_dtime_5 <- mod1_dtime$SAU5
+
+mod2_larea_5 <- mod2_larea$SAU5
+mod2_ltime_5 <- mod2_ltime$SAU5
+
+mod_l_dat <- l_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU5") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+mod_d_dat <- d_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU5") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+
+```
+
+```{r, echo=FALSE}
+# pdat <- with(dat,
+#                  expand.grid(logrtime = 60, 
+#                              # diver_ex = median(sau12in$diver_ex),
+#                              fishyear = levels(fishyear) |> factor(),
+#                              subblockno = levels(subblockno) |> factor())) |>
+#   within({
+#     year <- as.numeric(as.character(fishyear))
+#   })
+
+
+#get_call(mod5 )
+
+pdat_mod1_ltime <- mod_l_dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+pdat_mod1_dtime <- mod_d_dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    docktime <- 60
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- mod_d_dat$diver_id[1]
+    fishmonth <- mod_d_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+pdat_mod2_larea <- mod_l_dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+pdat_mod2_ltime <- mod_l_dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+hyp_time <- data.table::rbindlist(map2(mod2_ltime, "logrtime", predict_lme4_hyp), fill = TRUE, idcol = "SAU")
+hyp_area <- data.table::rbindlist(map2(mod2_larea, "lograrea", predict_lme4_hyp), fill = TRUE, idcol = "SAU")
+
+
+## Mod2 Area
+
+vc <- VarCorr(mod2_larea_5)$cond
+s2 <- sigma(mod2_larea_5 )^2 + (vc %>% unclass() %>%
+                            .[c("diver_id", "fishmonth", "subblockno",
+                                "subblockno:fishyear")] %>%
+                            unlist() %>%
+                            sum())
+
+s2c <- sigma(mod2_larea_5 )^2 + (vc %>% unclass() %>%
+                            .[c("diver_id", "fishmonth")] %>%
+                            unlist() %>%
+                            sum())
+
+
+pdat_mod2_larea$fmod_BC <- (predict(mod2_larea_5 , newdata = pdat_mod2_larea, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_larea_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_larea_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_larea |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_larea$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_larea$method <- "L_Area"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod2 Time
+
+vc <- VarCorr(mod2_ltime_5)$cond
+s2 <- sigma(mod2_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod2_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod2_ltime$fmod_BC <- (predict(mod2_ltime_5 , newdata = pdat_mod2_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_ltime_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_ltime_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 docket Time
+
+vc <- VarCorr(mod1_dtime_5)$cond
+s2 <- sigma(mod1_dtime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod1_dtime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod1_dtime$fmod_BC <- (predict(mod1_dtime_5 , newdata = pdat_mod1_dtime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_dtime$method <- "D_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time
+
+vc <- VarCorr(mod1_ltime_5)$cond
+s2 <- sigma(mod1_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(mod1_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime$fmod_BC <- (predict(mod1_ltime_5 , newdata = pdat_mod1_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+predict_mod2_5 <- bind_rows(pdat_mod2_larea, pdat_mod2_ltime)
+
+## within needs to be done by blockno - must work out how to do that
+predict_mod2_5 <- predict_mod2_5 %>% 
+  #group_by(method) %>% 
+  within({ 
+  scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+})
+
+miny <- floor(min(predict_mod2_5$scaled))
+maxy <- ceiling(max(predict_mod2_5$scaled))
+
+
+hyperplot <-
+  ggplot(predict_mod2_5,
+         aes(
+           x = factor(year),
+           y = scaled,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  ylim(miny, maxy) +
+  labs(y = "Relative change in effort") +
+  scale_colour_manual(values = c(
+    L_Area = redish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod2_5, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+hyperplot <- update_labels(hyperplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+Crude_CPUE <- mod_d_dat %>% 
+  group_by(fishyear) %>% 
+  summarise(fmod_BC = sum(catch_est)/sum(docktime/60), .groups = "drop") %>% 
+  within({
+    year <- as.numeric(as.character(fishyear))
+  })
+
+Crude_CPUE$method <- "Crude"
+
+
+predict_mod1_5 <- bind_rows(select(pdat_mod1_dtime, year, fmod_BC, method), 
+                            select(pdat_mod1_ltime, year, fmod_BC, method),
+                            Crude_CPUE)
+
+
+## within needs to be done by blockno - must work out how to do that
+predict_mod1_5 <- predict_mod1_5 %>% within({
+  scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+})
+
+
+CPUEplot <-
+  ggplot(predict_mod1_5,
+         aes(
+           x = factor(year),
+           y = fmod_BC,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  #ylim(20, 120) +
+  labs(y = "Catch (per dive hour) ") +
+  scale_colour_manual(values = c(
+    Crude = "black",
+    D_Time = greenish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_5, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+CPUEplot <- update_labels(CPUEplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| label: fig-cpue-B5
+#| fig-cap: "Modelling catch and effort for Northern Zone, SAU 5(subblocks 5A, 5B, 5C, 6A, 6C, 6D).  A) Crude and standardised catch achieved for 1 hour of effort (docket and logger); B) Relative change in effort (logger area, logger time) required to achieve 100kg of catch."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+SAU5plots <- (CPUEplot + hyperplot)
+
+SAU5plots + plot_annotation(tag_levels = 'A') 
+
+```
+
+### Case study 2: SAU21
+
+In contrast to SAU5, abalone abundance in SAU21 is rebuilding between 2012 and 2021, with a down turn in catch rate associated with the Marine Heat Wave in 2016 ([@fig-cpue-B21]A). The typical approach in abalone fisheries of modelling catch as a function of effort (in this case 1 hour of dive time) identifies a sharp decline in catch rate in 2016, followed by an immediate increase in 2017 which continues through 2021 ([@fig-cpue-B21]A). The GPS logger and Docket book estimated annual mean catch rates using time as a measure of effort are very similar ([@fig-cpue-B21]A), with minor difference in mean catch rate and a common temporal trend. Catch rates for both datasets nearly double over the time-series, despite the impact of the Marine Heat Wave in 2016. Crude catch rate follows a similar pattern to the standardised catch rates, although there is some deviation in the first three years and again in the final year ([@fig-cpue-B21]A). Crude catch rate is very similar to the catch \~ offset(effort) approach, although with some trend departure in the first (2012) and last (2021) years.
+
+When modelling effort required to achieve 100kg of catch, a rather different pattern is apparent in SAU21 compared to SAU5. For SAU21, area as our measure of effort declines at a faster rate than when using time as our measure of effort ([@fig-cpue-B21]B) i.e. the area required to achieve 100kg of catch reduces a greater rate with higher abalone abundance. This pattern is apparent in both rebuilding phases within the time-series - from 2012 to 2015, and then again from 2017 - 2021 ([@fig-cpue-B21]B). The difference in the rate of relative change in effort required when catch rates are improving, is not as great as the rate of relative change when catch rates are declining ([@fig-cpue-B5]B).
+
+```{r}
+#| echo: false
+mod1_ltime_21 <- mod1_ltime$SAU21
+mod1_dtime_21 <- mod1_dtime$SAU21
+
+mod2_larea_21 <- mod2_larea$SAU21
+mod2_ltime_21 <- mod2_ltime$SAU21
+
+mod_l_dat <- l_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU21") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+mod_d_dat <- d_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU21") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+
+```
+
+```{r, echo=FALSE}
+# pdat <- with(dat,
+#                  expand.grid(logrtime = 60, 
+#                              # diver_ex = median(sau12in$diver_ex),
+#                              fishyear = levels(fishyear) |> factor(),
+#                              subblockno = levels(subblockno) |> factor())) |>
+#   within({
+#     year <- as.numeric(as.character(fishyear))
+#   })
+
+
+#get_call(mod21 )
+
+pdat_mod1_ltime <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+pdat_mod1_dtime <- mod_d_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    docktime <- 60
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- mod_d_dat$diver_id[1]
+    fishmonth <- mod_d_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+
+
+pdat_mod2_larea <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+pdat_mod2_ltime <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod2 Area
+
+vc <- VarCorr(mod2_larea_21)$cond
+s2 <- sigma(mod2_larea_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod2_larea_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod2_larea$fmod_BC <- (predict(mod2_larea_21 , newdata = pdat_mod2_larea, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_larea_21 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_larea_21 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_larea |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_larea$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_larea$method <- "L_Area"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod2 Time
+
+vc <- VarCorr(mod2_ltime_21)$cond
+s2 <- sigma(mod2_ltime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod2_ltime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod2_ltime$fmod_BC <- (predict(mod2_ltime_21 , newdata = pdat_mod2_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_ltime_21 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_ltime_21 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time
+
+vc <- VarCorr(mod1_dtime_21)$cond
+s2 <- sigma(mod1_dtime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod1_dtime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod1_dtime$fmod_BC <- (predict(mod1_dtime_21 , newdata = pdat_mod1_dtime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_21 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_21 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_dtime$method <- "D_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time
+
+vc <- VarCorr(mod1_ltime_21)$cond
+s2 <- sigma(mod1_ltime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(mod1_ltime_21 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime$fmod_BC <- (predict(mod1_ltime_21 , newdata = pdat_mod1_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_21 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_21 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+predict_mod2_21 <- bind_rows(pdat_mod2_larea, pdat_mod2_ltime)
+
+## within needs to be done by blockno - must work out how to do that
+predict_mod2_21 <- predict_mod2_21 %>% within({
+  scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+})
+
+
+miny <- floor(min(predict_mod2_21$scaled))
+maxy <- ceiling(max(predict_mod2_21$scaled))
+
+hyperplot <-
+  ggplot(predict_mod2_21,
+         aes(
+           x = factor(year),
+           y = scaled,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  ylim(miny, maxy) +
+  labs(y = "Relative change in effort") +
+  scale_colour_manual(values = c(
+    L_Area = redish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod2_21, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+hyperplot <- update_labels(hyperplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+Crude_CPUE <- mod_d_dat %>% 
+  group_by(fishyear) %>% 
+  summarise(fmod_BC = sum(catch_est)/sum(docktime/60), .groups = "drop") %>% 
+  within({
+    year <- as.numeric(as.character(fishyear))
+  })
+
+Crude_CPUE$method <- "Crude"
+
+
+predict_mod1_21 <- bind_rows(select(pdat_mod1_dtime, year, fmod_BC, method), 
+                            select(pdat_mod1_ltime, year, fmod_BC, method),
+                            Crude_CPUE)
+
+## within needs to be done by blockno - must work out how to do that
+predict_mod1_21 <- predict_mod1_21 %>% within({
+  scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+})
+
+
+
+CPUEplot <-
+  ggplot(predict_mod1_21,
+         aes(
+           x = factor(year),
+           y = fmod_BC,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  #ylim(20, 120) +
+  labs(y = "Catch (per dive hour) ") +
+  scale_colour_manual(values = c(
+    Crude = "black",
+    D_Time = greenish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_21, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+CPUEplot <- update_labels(CPUEplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| label: fig-cpue-B21
+#| fig-cap: " Modelling catch and effort for Eastern Zone, SAU21 (subblocks 21A, 21B, 21C). A) Crude and standardised catch achieved for 1 hour of effort; B) Relative change in effort required to achieve 100kg of catch."
+#| fig-pos: "H"
+#| fig-width:  8
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+SAU21plots <- (CPUEplot + hyperplot)
+
+SAU21plots + plot_annotation(tag_levels = 'A') 
+
+```
+
+### Case study 3: SAU13
+
+Block 13 Catch rates ((catch \~ offset(effort)) were stable in the first two years, with a dip in 2014, followed by improvements in catch rate through to 2021 (([@fig-cpue-B13]A)). In contrast to SAU5 and SAU21, the crude catch index also departs from the catch \~ offset(effort) standardised catch rate index for the middle phase of the time-series (2016-18) ([@fig-cpue-B13]A). Mean catch rates for both Docket book and GPS logger estimates of time are almost identical for the entire time-series, using the catch \~ offset(effort) approach.\
+Estimates of mean effort required to achieve 100kg of catch over the time-series decline over the time-series, with the exception of 2014, where effort required increased sharply ([@fig-cpue-B13]B). As observed for SAU21, when effort is measured as area of the dive polygon, the index of effort required declines faster than when time is our measure of effort.
+
+```{r}
+#| echo: false
+mod1_ltime_13 <- mod1_ltime$SAU13
+mod1_dtime_13 <- mod1_dtime$SAU13
+
+mod2_larea_13 <- mod2_larea$SAU13
+mod2_ltime_13 <- mod2_ltime$SAU13
+
+mod_l_dat <- l_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU13") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+mod_d_dat <- d_day %>% 
+  filter(SAU == "SAU13") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+
+```
+
+```{r, echo=FALSE}
+# pdat <- with(dat,
+#                  expand.grid(logrtime = 60, 
+#                              # diver_ex = median(sau12in$diver_ex),
+#                              fishyear = levels(fishyear) |> factor(),
+#                              subblockno = levels(subblockno) |> factor())) |>
+#   within({
+#     year <- as.numeric(as.character(fishyear))
+#   })
+
+
+#get_call(mod13 )
+
+pdat_mod1_ltime <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+pdat_mod1_dtime <- mod_d_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    docktime <- 60
+    numdivers <- factor(1, levels = c(1,2))
+    diver_id <- mod_d_dat$diver_id[1]
+    fishmonth <- mod_d_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+
+
+pdat_mod2_larea <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+pdat_mod2_ltime <- mod_l_dat |> 
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    catch_est <- 100
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod2 Area
+
+vc <- VarCorr(mod2_larea_13)$cond
+s2 <- sigma(mod2_larea_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod2_larea_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod2_larea$fmod_BC <- (predict(mod2_larea_13 , newdata = pdat_mod2_larea, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_larea_13 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_larea_13 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_larea |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_larea$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_larea$method <- "L_Area"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod2 Time
+
+vc <- VarCorr(mod2_ltime_13)$cond
+s2 <- sigma(mod2_ltime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod2_ltime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod2_ltime$fmod_BC <- (predict(mod2_ltime_13 , newdata = pdat_mod2_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod2_ltime_13 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod2_ltime_13 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod2_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time
+
+vc <- VarCorr(mod1_dtime_13)$cond
+s2 <- sigma(mod1_dtime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod1_dtime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+pdat_mod1_dtime$fmod_BC <- (predict(mod1_dtime_13 , newdata = pdat_mod1_dtime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_13 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_13 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_dtime$method <- "D_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time
+
+vc <- VarCorr(mod1_ltime_13)$cond
+s2 <- sigma(mod1_ltime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(mod1_ltime_13 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime$fmod_BC <- (predict(mod1_ltime_13 , newdata = pdat_mod1_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_13 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_13 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_ltime$method <- "L_Time"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+predict_mod2_13 <- bind_rows(pdat_mod2_larea, pdat_mod2_ltime)
+
+## within needs to be done by blockno - must work out how to do that
+predict_mod2_13 <- predict_mod2_13 %>% within({
+  scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+})
+
+miny <- floor(min(predict_mod2_13$scaled))
+maxy <- ceiling(max(predict_mod2_13$scaled))
+
+hyperplot <-
+  ggplot(predict_mod2_13,
+         aes(
+           x = factor(year),
+           y = scaled,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  ylim(miny, maxy) +
+  labs(y = "Relative change in effort") +
+  scale_colour_manual(values = c(
+    L_Area = redish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod2_13, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+hyperplot <- update_labels(hyperplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+Crude_CPUE <- mod_d_dat %>% 
+  group_by(fishyear) %>% 
+  summarise(fmod_BC = sum(catch_est)/sum(docktime/60), .groups = "drop") %>% 
+  within({
+    year <- as.numeric(as.character(fishyear))
+  })
+
+Crude_CPUE$method <- "Crude"
+
+
+predict_mod1_13 <- bind_rows(select(pdat_mod1_dtime, year, fmod_BC, method), 
+                            select(pdat_mod1_ltime, year, fmod_BC, method),
+                            Crude_CPUE)
+
+
+## within needs to be done by blockno - must work out how to do that
+# predict_mod1_13 <- predict_mod1_13 %>% within({
+#   scaled <- ave(fmod_BC, method, FUN = function(x) exp(x / x[1]))
+# })
+
+
+CPUEplot <-
+  ggplot(predict_mod1_13,
+         aes(
+           x = factor(year),
+           y = fmod_BC,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  ylim(0, 120) +
+  labs(y = "Catch (per dive hour) ") +
+  scale_colour_manual(values = c(
+    Crude = "black",
+    D_Time = greenish,
+    L_Time = blueish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_13, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+CPUEplot <- update_labels(CPUEplot, list( x = "Year"))
+
+
+```
+
+```{r}
+#| label: fig-cpue-B13
+#| fig-cap: " Modelling catch and effort for Eastern Zone, SAU13. A) Crude and standardised catch achieved for 1 hour of effort; B) Relative change in effort required to achieve 100kg of catch."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+SAU13plots <- (CPUEplot + hyperplot)
+
+SAU13plots + plot_annotation(tag_levels = 'A') 
+
+```
+
+## Discussion
+
+### Modelling relative change in effort
+
+Divers routinely comment that they are covering much greater area per dive as abundance declines and by swimming faster as they search for abalone they are able to maintain catch rates (Kg/Hr). Through the GPS logger program, we have captured and quantified that spatial change in fishing activity. When area was used as our measure of effort, the relative change in effort required in SAU5 to harvest 100kg of catch increased markedly over time based measures of effort ([@fig-cpue-B5]B). Similarly, the relative change in area declined faster than the relative change in time required to harvest 100kg from 2018 onwards as catch rates begin to improve ([@fig-cpue-B5]A). These results clearly demonstrate that reliance on time as our measure of fishing effort under-estimates the fishing effort required to harvest 100kg of abalone (i.e. catch rate indices using time as a measure of effort are hyperstable). Hyperstable catch rates in an experimental Paua fishery was also observed by @abraham2015, although this finding was assigned to serial depeltion over the course of the experiment. This is the first empirical confirmation of a change in fisher behaviour leading to hyperstable catch rates in an abalone fishery.
+
+While the rate of change in area was greater than the change in time required to harvest 100kg of abalone, the magnitude of the change over the time-series (2012-21) varied greatly among SAUs. One possible explanation is that the magnitude of the relative change in effort is linked to the level of depletion. In terms of productivity and stock health, we can order the three SAU case studies as SAU13 in the best health, followed by SAU21, and then SAU5 which is recovering from severe depletion. Respectively, the magnitude of relative change was smallest at SAU13 ([@fig-cpue-B13]B) and largest at SAU5 ([@fig-cpue-B5]B). Alternatively, the observed patterns in rate of change of in effort required may be linked more strongly to the habitat type and reef complexity, with SAU5 having relatively low reef complexity in comparison to SAU21 and SAU13. However, SAU21 is much more complex in terms of reef structure than SAU13. The low topographic complexity of reef systems in SAU5 may have been a contributing factor to the extent of depletion, but is perhaps unlikely to be a key factor affecting the magnitude of change in relative effort observed in this study.
+
+### Hypothetical relationship between CPUE and biomass revisited
+
+As well as differential rates of change expressed using time and area as measures of effort in a declining fishery, we also found evidence of hyperstability in catch rate indices when catch rates are above average and improving. Patterns of relative change in effort for area and time in SAU21 and SAU13 (improving fisheries), demonstrate that time based catch rate indices are also subject to hyperstability at the upper margins of catch rates when abalone abundance is improving. Thus hyperstability is not restricted to depleting stocks, and can affect catch rate indices at both ends of the catch rate range. In hypothetical terms, the non-linear relationship between catch rate index and biomass would be better described by [@fig-hyperstable-hypo2], than by [@fig-hyperstable-hypo1]. @gaertner2004 alluded to the possibility of hyperstability occurring at upper and lower ranges of stock abundance in their simulations of a tuna purse-seine fishery [@gaertner2004 Figure 3]. However, no empirical demonstration of hyperstability of an improving stock has been reported previously in the literature.
+
+```{r}
+#| label: fig-hyperstable-hypo2
+#| fig-cap: "Revised hypothetical relationship between Biomass and CPUE (where CPUE is assumed to be an index of abundance). The non-linear relationship between CPUE and abundance is modified to reflect the finding that time based CPUE overestimate abundance when low, and underestiamte abundance when CPUE is high. The black line (Assumed) represents the assumed relationship where the index is proportional to abundance, while the red line (Hyperstable) represents a non-linear hyperstable relationship between the index and actual abundance.  "
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+p <-
+ filter(lbda_dat,
+        #lbda %in% c("Assumed", "Hyperstable", "Spatial", "Hyper")) %>%
+        lbda %in% c("Assumed",  "Hyper")) %>%
+ ggplot(aes(
+  x = x,
+  y = y,
+  group = lbda,
+  colour = lbda
+ )) +
+ geom_point(size = 1) +
+ scale_color_manual(values = c(
+  "Assumed" = "black",
+  "Spatial" = "green",
+  "Hyperstable" = "red",
+  "Hyper" = "red"
+ )) +
+ theme_light() +
+ theme(
+  text = element_text(size = 16),
+  axis.text = element_blank(),
+  legend.title = element_blank()
+ )
+
+
+pwr_plot_spatial <- update_labels(p, list(x = "Abundance/Biomass", y = "Catch Rate"))
+
+pwr_plot_spatial
+
+
+
+## savedir <- "C:/Users/cmundy/OneDrives/OneDrive - University of Tasmania/Research/Presentations/Conferences/IntAbSymp/IAS2023"
+#ggsave(file.path(savedir, "Biomass_index_spatial.svg"), pwr_plot_spatial, device = "svg", width = 12, height = 10, units = "cm")
+
+
+```

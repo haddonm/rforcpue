@@ -1,0 +1,734 @@
+
+# Climate Data Part 3: Standardisation Results {#sec-chapter16}
+```{r setup, include=FALSE}
+
+
+knitr::opts_chunk$set(echo = TRUE, comment = "", out.width = "90%",
+                      fig.align = "center", fig.width = 6, fig.asp = 0.618,
+                      message = FALSE, warning = FALSE)
+options(knitr.kable.NA = '*', stringsAsFactors = FALSE)
+
+pad_with_zeros <- function(n) {
+  gsub(" ", "0", format(n, justify = "right"))
+}
+
+## generate a new line in LaTeX rendered documents only (nothing if html or word)
+is_latex <- knitr::opts_knit$get("rmarkdown.pandoc.to") == "latex"
+newline   <- ifelse(is_latex, "\\newline",   "")
+newpage   <- ifelse(is_latex, "\\newpage",   "")
+clearpage <- ifelse(is_latex, "\\clearpage", "")
+pagebreak <- ifelse(is_latex, "\\pagebreak", "")
+
+library(tidyverse)
+library(cowplot)
+library(ggforce)
+library(patchwork)
+library(knitr)
+library(splines)
+library(visreg)
+library(lme4)
+
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5)))
+
+```
+
+```{r data, echo=FALSE}
+# if(Sys.info()[4] == "DESKTOP-NRMCG9M") {
+#   datadir <- "D:/Dropbox/AbaloneData/"
+#   abCEbl <- readRDS("D:/Dropbox/AbaloneData/Climate_logbook_bl_2023_03_07.RDS")
+# } else { 
+#   datadir <-  sprintf("C:/Users/%s/Dropbox/AbaloneData/", Sys.info()[["user"]])
+#   abCEbl <- readRDS(sprintf("C:/Users/%s/Dropbox/AbaloneData/Climate_logbook_bl_2023_03_07.RDS",
+#                             Sys.info()[["user"]]))
+# }
+
+if(!grepl("Bill", Sys.info()["user"])) {
+  if(Sys.info()[4] == "DESKTOP-NRMCG9M") {
+    datadir <- "D:/Dropbox/AbaloneData/"
+    abCEbl <- readRDS("D:/Dropbox/AbaloneData/Climate_logbook_bl_2023_03_07.RDS")
+  } else { 
+    datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+    abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+  }
+} else {
+  ###
+  ### Bill's setup is different...
+  ###
+  si <- Sys.info()
+  if(si["sysname"] == "Windows") {
+    ## my dropbox is on D:
+    datadir <-  "D:/Users/Bill/Dropbox/AbaloneData/"
+  } else {
+    ## Linux
+    datadir <- "~/Dropbox/AbaloneData"
+  }
+  abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+}
+
+## Logbook data - Most recent
+abCEbldiver_ex_blckday <- abCEbl$diver_ex
+abCEbl$diver_ex <- NULL
+
+
+vars <- abCEbl %>% 
+  ungroup() %>% 
+  select(plaindate, diver_id) %>% 
+  unique() %>% 
+  within({
+    diver_year <- as.POSIXlt(plaindate)$year + 1900
+    diver_ex <- ave(diver_year, diver_id, 
+      # FUN = function(x) x - min(x, na.rm = TRUE)) #### original function
+      FUN = function(x) cumsum(!duplicated(x)) - 1) #### changed  function 
+  }) 
+BLdat <- left_join(abCEbl, vars, by = c("plaindate", "diver_id")) %>% 
+  data.frame()
+
+
+BLdat <- BLdat              %>%                      # start with this
+  subset(1991 < fishyear & 
+           fishyear < 2023) %>%                      # remove any data too old OR too new!
+  droplevels()              %>%                      # remove unused fishers
+  rename(zone = newzone,
+         logCPUE = LnCE)    %>%                      # new name for an old variable              
+  within({
+    diver_id <- factor(diver_id)
+    year <- factor(fishyear)
+    month <- factor(month.abb[fishmonth], levels = month.abb)
+    block <- factor(pad_with_zeros(blockno))
+    two_divers <- 0 + (numdivers > 1)   # binary to allow for 2-diver events
+    hours <- pmax(1/12, pmin(hours,24)) # logically there shouldn't be zero or >24 hours 
+    # cpue's given daily logs- CHECK! Note 0 hours values have
+    # real logCPUE values which don't make sense!!
+    logCPUE <- pmax(-2.5, pmin(logCPUE, 5.5))   ### put a guard on logCPUE to stop later crashing
+    zone <- factor(zone, levels = c("BS", "N", "W", "E"))
+    is.na(wave_hght[!is.na(wave_hght) & wave_hght == 0]) <- TRUE
+    is.na(wave_power[!is.na(wave_power) & wave_power == 0]) <- TRUE
+    sst <- C
+  })                      %>% 
+  select(diver_id, diver_ex, year, month, plaindate, zone, block,two_divers, propblip, 
+         catch, totalcatch, hours, cpue, logCPUE, wave_hght, wave_power, wave_dir,
+         wave_mode, wind_speed, wind_dir, wind_sd, wind_mode, sst) %>% 
+  data.frame(stringsAsFactors = FALSE)      
+
+# cpoints <- setNames(seq(0, by = 22.5, length.out = 16),
+#                     c("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", 
+#                       "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"))
+BLdat <- BLdat %>% 
+  within({
+    wave_mode <- sub("NWN", "NNW", as.character(wave_mode))
+    wind_mode <- sub("NWN", "NNW", as.character(wind_mode))
+   # compass <- cpoints[direction]
+   # direction <- factor(direction, levels = names(cpoints))
+  })
+rm(rdata, vars)
+
+### combine zone and block for convenience
+### 
+
+BZ <- BLdat %>% 
+  select(block, zone) %>% 
+  unique() %>% 
+  arrange(zone, block) %>% 
+  within({
+    blzone <- paste0(as.character(block), 
+                     " (", format(as.character(zone), justify = "right"), ")")
+    blzone <- factor(blzone, levels = sort(blzone))
+  })
+
+BLdat <- merge(BLdat, BZ, by = c("block", "zone"))
+rm(BZ)
+
+### add in day of year
+### 
+
+BLdat <- BLdat %>% within({
+  yday <- as.POSIXlt(plaindate)$yday
+  fyear <- factor(year)
+})
+```
+
+```{r fit-models, echo=FALSE, cache=TRUE}
+mod_1 <- lmer(logCPUE ~ poly(asin(sqrt(1-propblip)), 4) + 
+                two_divers +
+                ns(diver_ex, 3) + 
+                year +
+                (1|diver_id) + (1|month/year/block) +  ## within years
+                (1|block/year),                        ## between years
+              control = lmerControl(optimizer = "bobyqa"),
+              data = BLdat)
+
+mod_1_BS <- update(mod_1, subset = zone == "BS")
+mod_1_N  <- update(mod_1, subset = zone == "N")
+mod_1_W  <- update(mod_1, subset = zone == "W")
+mod_1_E  <- update(mod_1, subset = zone == "E")
+
+```
+
+```{r standardisations, echo=FALSE}
+pBLdat <- BLdat %>% 
+  select(diver_ex, year, zone, block, blzone, two_divers, propblip) %>% 
+  within({
+    diver_ex <- 6 ## median value
+    propblip <- 1
+    two_divers <- 0
+  }) %>% 
+  unique() %>% 
+  arrange(year, block) %>% 
+  data.frame()
+
+###  Global predictions                                           
+
+pBLdat <- within(pBLdat, {
+  logCE <- predict(mod_1, pBLdat, re.form = ~(1|block/year))
+  vc <- VarCorr(mod_1)
+  sigma2 <- sum(c(unlist(vc[c("block:(year:month)", "diver_id", 
+                            "year:month", "month")]), attr(vc, "sc")^2))
+  CE <- exp(logCE + sigma2/2)
+  vc <- NULL
+})
+
+byZone <- pBLdat %>% 
+  select(diver_ex, propblip, two_divers, block, year, zone) %>% 
+  split(., .$zone) %>% 
+  lapply(function(dat) {
+    modl <- get(paste0("mod_1_", as.character(dat$zone[1])))
+    within(dat, {
+      logCE_l <- predict(modl, dat, re.form = ~(1|block/year))
+      vc <- VarCorr(modl)
+      sigma2_l <- sum(c(unlist(vc[c("block:(year:month)", "diver_id", 
+                                    "year:month", "month")]), attr(vc, "sc")^2))
+      CE_l <- exp(logCE_l + sigma2_l/2)
+      vc <- NULL
+    })
+  }) %>% 
+  do.call(rbind, .) %>% 
+  arrange(year, block) %>% data.frame()
+
+crudeCPUE <- BLdat %>% 
+  group_by(year, zone, block) %>% 
+  summarise(CE_crude = weighted.mean(exp(logCPUE), hours),
+            logCE_crude = log(CE_crude)) %>% 
+  ungroup() %>% 
+  arrange(year, block) %>% data.frame()
+
+pBLdat <- pBLdat %>% 
+  left_join(byZone %>% 
+              select(-diver_ex, -two_divers, -propblip), 
+            by = c("year", "zone", "block")) %>% 
+  left_join(crudeCPUE, by = c("year", "zone", "block")) %>% 
+  data.frame() %>% arrange(year, block)
+```
+
+
+## Preamble
+
+This is Part 3 of the triptych.   Part 1 was mainly concerned with visualising
+and exploring the climate data itself.  Part 2 looked at the possibilities for including
+climate data, such as we have, in a standardisation model.  The overall conclusion was that
+what we had at that stage did not appear to offer any useful enhancements, at least not
+within a notional global standardisation model.  The present Part 3 is a follow-up on
+that notional standardisation model itself, with a few tweaks and comparisons with
+potential alternatives.
+
+The data we use is the same as the extended version produced and used in Part 1, but
+_the short record form 2023 has been excluded_ to avoid unnecessary complications.
+
+
+The records by zone and year are as follows:
+```{r records, echo=FALSE, results="asis"}
+tab <- with(BLdat, {
+  zone <- recode_factor(zone,
+                        BS = "Bass Strait",
+                        N = "North",
+                        E = "East",
+                        W = "West")
+  table(zone, year)
+})
+oldOpt <- options(knitr.kable.NA = '--')
+(cbind(`1990` = NA, `1991` = NA, tab[, 1:8])) %>% kable()
+(tab[,  9:18]) %>% kable()
+(tab[, 19:28]) %>% kable()
+(tab[, 29:31]) %>% kable()
+options(oldOpt)
+```
+
+
+<!-- `r newpage` -->
+## Standardisation strategies
+
+In this section we present our current thinking on alternative approaches to
+the standardisation issue, initially for the Blacklip Abalone only.
+
+As we understand it, the current standardisation method is a 'block by
+block' approach, where a model _selection_ process, as well as model
+fitting takes place in every block separately. The block-by-block approach:
+
++ Is parameter rich, implicitly fitting a separate set of parameters,
+  including variance parameters, for all 57 blocks.  The effect of the
+  separate, though structured, model _selection_ aspect of this process
+  is difficult to assess, but it adds a level of complication
+  when simplicity is a virtue.
++ In working separately on each block, it potentially ignores any
+  advantages that taking into account the _context_ might have, particularly
+  for blocks with scant data.
+
+A 'block by block' approach represents one extreme case for taking
+context information into account when assessing individual blocks:
+i.e. use none at all: 'Every block is special'.  And, of course, to
+some extent every block is.  Nevertheless we suggest that it is
+worthwhile to investigate alternative approaches which do take into
+account context information by modelling at different spatial scales.
+We do so here using two modelling strategies:
+
+1. A global model using a single model fitted to data from the entire
+   Blacklip fishery, and
+2. A zone by zone strategy where separate models of the same form are
+   fitted to the data from each of the zones and catch standardisation
+   for any block uses the model pertinent to the zone in which it resides.
+
+```{r joint, echo=FALSE}
+BZ <- BLdat %>% select(block, zone) %>% unique() %>% do.call(table, .)
+BZ <- BZ[rowSums(BZ) > 1, ]
+apply(BZ, 1, function(x) colnames(BZ)[x == 1]) %>% t() %>% data.frame() -> bz
+paste0(rownames(bz), " (", bz[,1], ", ", bz[,2], ")") -> bl
+joint_members <- paste(bl, collapse = ", ")
+```
+
+With regard to 2., we note that according to the data, we have
+some blocks appear to be split between two zones. These blocks,
+and the zones to which they belong in parentheses, are: `r joint_members`.
+In these cases the blocks in question will be included in _both_
+zone models, but only _once_ in the global model, of course.
+
+Note also that this is primarily a feasibility study.  We only use zones as
+a convenient (semi-)partition of the blocks into a workable number of spatially
+compact groups; alternative partitions may well be more appropriate
+if this strategy is ultimately adopted.
+
+## Fixed and random effects
+
+Before proceeding to the model details, we make some points about the
+choice of fixed and random effects, as previously argued in the _Exegesis_
+document.
+
+* From a practical point of view, in standardisation as here the distinction
+  between fixed and random terms is slight.  The main difference in this
+  context is the way in which they are estimated.  Random terms are
+  estimated with _model-based penalisation_, which makes them very similar
+  in essence to smooth terms in generalised additive models, which are
+  estimated with _data-based penalisation_ using generalised cross-validation. 
+
+* Fixed effect terms, after estimation, have the logical status of parameter
+  estimates.  Random effect terms have a logical status more akin to _residuals_
+  and have _variance component_ estimates associated with them, as well as
+  the BLUP estimates, which can be likened to parameters in some qualified
+  sense.
+  
+* Prediction with mixed effect models can take several forms.  In any prediction
+  - All fixed effect terms must be included in any prediction.
+  - Random effect terms may be included or excluded, depending on purpose.
+    If all random effect terms are excluded,
+    the prediction is said to be _marginal_ to the random terms.
+  - If any random effect is included, the prediction is said to be _conditional_
+    on it.   
+    In this case any excluded random terms will contribute their
+    variance components to the overall error when considering uncertainty.
+  - In predictions, excluding a random effect amounts to assuming it has
+    a zero contribution to the estimate of the mean.
+
+### A global model
+
+For the entire fishery model, (1. above), after some exploration of
+alternatives the form to which we were finally led is as follows:
+
+```{r mod_1, eval=FALSE}
+mod_1 <- lmer(logCPUE ~ poly(asin(sqrt(1-propblip)), 4) + ## fixed
+                two_divers +  ns(diver_ex, 3) +           ## fixed  
+                year +                                    ## fixed
+                (1|diver_id) + (1|month/year/block) +     ## _within_ years
+                (1|block/year),                           ## _betweein_ years
+              control = lmerControl(optimizer = "bobyqa"),
+              data = BLdat)
+```
+
+We work on the assumption that for each block standardisation is required
+on an _annual_ basis; the catch and effort data is supplied on a daily basis,
+so some averaging is required to arrive at an annual standardised CPUE.  This
+averaging is achieved in predictions, (or 'backcasts' as they are known), in
+the model above by
+
++ retaining terms in prediction that are _constant_ within years, (which include
+  all the fixed effects, of course) and
++ using the random terms that _vary_ within years effectively as components
+  of the overall error, but estimated in particular strata.
+  
+The random effect terms that are constant within years are all included in
+`(1|block/year)`.  The other random terms account for within-year variability
+at several levels, including the lowest, the per observation level, implicitly.
+
+Note that the diver random effect, `(1|diver_id)`, has both between and
+within year components.  This is an unavoidable weakness of the design: some
+information on the stock status is inevitably lost through confounding with
+diver.  Hopefully this loss is small when there are several divers.
+
+Some comments on the role of the other terms are as follows.
+
+* `ns(diver_ex, 3)` has been included as a fixed effect to allow some
+  account to be taken of "diver experience", as noted in Part 2.  This has
+  the effect of reducing the variance component associated with the `diver_id`
+  random effect, which reduces the uncertainty, but also of requiring some
+  specific value to be given for the fixed effect term, as it is necessarily
+  included in the predictions.
+<!--   We chose `diver_ex = 0` for this purpose, -->
+<!--   and it is the modal value in the data itself by a wide margin. -->
+<!-- * For the other fixed effect terms the values chosen for the standardisation -->
+<!--   predictions are -->
+<!--   `propblip = 1` and `two_divers = 0`, which are the dominant values in the data. -->
+* The main effect for `year` has been modelled as fixed, though it could have
+  been a random term without appreciable difference to the result.
+* The random terms `(1|month/year/block)` account for a `month` random main effect, and a
+  `month:year` random interaction and a `month:year:block` three-way interaction.
+  There is little choice but to make these main effects and
+  interactions random, but the month main effect could have been modelled as fixed.
+  Here the advantage of modelling it as random is that it may be excluded
+  from the predictions, thus facilitating averaging within years as noted above.
+  Had it been modelled as fixed, however, predictions would have had to be made at
+  some specific month of the year.  Choosing such a month seems arbitrary,
+  though possibly not an insurmountable obstacle.
+* The three-way term `(1|block:(year:month))` contained in the above, 
+  is present to 'iron out' differences within years across months at the
+  block level.  As it varies within year, it is excluded from the
+  predictions so it contributes to the overall error.   
+  Note that for the data set we have this term alone leads
+  to `r with(BLdat, length(unique(block:year:month)))` BLUPs.  For this
+  reason alone it needs to be a random term, as estimating so many
+  fixed effect parameters is both practically difficult and statistically
+  risky.  This is one of the big advantages of modern random effect model
+  fitting technology, that such large terms can be handled reasonably comfortably,
+  but only as random effects.
+* The term `(1|block/year)` is the work horse for the predictions.  In the
+  `block` main effect it estimates a static difference between the blocks
+  themselves across the fishery and in the `block:year` interaction it measures,
+  deviations from this block average across the years.  
+  The combination of the `year` main effect, the `block` main effect and the
+  `block:year` interaction will be used to reflect
+  how this block CPUE (in the log scale) has fluctuated, on average, across years. 
+
+### Per zone models
+
+To give some insight on the role of spatial scale in the standardisation,
+as indicated above, we fitted separate models to the blocks in the four
+administrative zones, and used the appropriate zone model to provide the
+standardisation for each block.  This admittedly fairly crude device is
+meant to fall somewhere between an all-fishery global scale and the
+single block local scale.
+
+To be specific, the same model was fitted to each zone, as in the code
+here:
+```{r zones, eval=FALSE}
+mod_1_BS <- update(mod_1, subset = zone == "BS")
+mod_1_N  <- update(mod_1, subset = zone == "N")
+mod_1_W  <- update(mod_1, subset = zone == "W")
+mod_1_E  <- update(mod_1, subset = zone == "E")
+```
+
+We also noted that four blocks apparently straddle two adjacent zones.
+These were:  `r joint_members`.  In these cases their results
+will also be split across the two zonal models.  Predictions
+(standardisations) will be given for those blocks _twice_
+using each of the zonal models to which they contribute.
+
+## Crude CPUE
+
+To provide the models with some reference point grounded more
+directly with the data itself, we simply use a crude CPUE
+measure for each block, for each year it has been fished.  That
+is, for any given block and year $y$, the crude CPUE is, using
+an obvious notation:
+$$
+\mbox{CPUE}_y = \frac{\sum \mbox{catch}_y}{\sum \mbox{hours}_y}
+$$
+and, of course, the crude log CPUE is just its natural logarithm.
+
+This crude measure ignores all of the identified extraneous
+influences of which the model approach takes account, but it does
+at least give an easily understood reference point in the data.
+
+## Results 
+
+### Setting fixed effect values
+
+Standardisation will be effected by prediction methods using a
+set of specified values for the fixed effects, (apart from `year` itself),
+and omitting the random effects on which the predictions are not
+conditional, namely the `diver_id` and `month` main effect and interactions.
+
+The values used for the fixed effects are
+
+* `propblip = 1`, i.e. the block is fully a Blacklip fishing area,
+* `diver_ex = 6`, i.e. we are dealing with a 6 year experience diver, (which
+  is the median value), and
+* `two_divers = 0`, i.e. only one diver is involved, again the most common value.
+
+The `year` fixed effect will cover 1992 to 2019 inclusive, the 28 years for which we have
+full season results.
+
+### The log and natural scale: bias corrections
+
+We also give parallel results in the log and in the natural scale.  Modelling
+is done in the log scale, so standardisation in the natural scale will require
+a bias correction if the predictions are to be of the mean, rather than the
+median in the natural scale (as is appropriate).  The simple bias corrections
+are all based on the mean of the lognormal distribution, which is given by
+$$
+\log Y \sim \mbox{N}(\mu, \sigma^2) \implies 
+  \mbox{E}[Y] = \exp\left(\mu + {\textstyle \frac12}\sigma^2\right) 
+$$
+So the back-transformed values need to be increased by the factor $\exp(\frac12\sigma^2)$.
+The appropriate variance, $\sigma^2$ to use for random effect models such as ours is
+not immediately clear, but we will use the sum of the variance components for random
+effects omitted from the prediction, plus the residual variance itself. In symbols
+$$
+\sigma^2 = \sigma^2_{\mathtt {diver\_id}} +
+           \sigma^2_{\mathtt {month}} + 
+           \sigma^2_{\mathtt {year:month}} + 
+           \sigma^2_{\mathtt {block:(year:month)}} + 
+           \sigma^2_{\mathtt {residual}}
+$$
+since each component is part of the overall error, independently, when predictions
+are conditional _only_ on the `block/year` random effects.
+
+Notice that this also raises another source of difference between the three
+spatial scales, as the variance (component) estimates are based on different
+data sets in each zone.  (We contend that this also poses a problem for any
+block by block analysis, but will not pursue that issue here.)
+
+### Block by block comparisons
+
+The diagrams following show, block by block, the results of the two standardisation
+methods described above, along with the crude CPUE.  The diagram on the left is
+the log(CPUE) and that on the right is the corresponding CPUE, bias corrected.
+
+The blocks are listed in order of their numerical labelling, and the header of
+each panel shows the block and the zone to which it belongs.  Recall that
+some blocks are split between zones, namely `r joint_members`, and are thus
+listed twice.
+
+
+```{r figures, fig.height=5, fig.width=12, out.width="100%", echo=FALSE}
+#| fig-width: 10
+#| fig-height: 10
+
+
+library(ggforce)
+library(patchwork)
+
+# logCPUE <- pBLdat %>% 
+#   select(year, blzone = blzone, Global = logCE, 
+#          Local = logCE_l, Crude = logCE_crude) %>% 
+#   within({
+#     is.na(Crude[Crude > log(250)]) <- TRUE
+#   }) %>% 
+#   pivot_longer(-c(blzone, year)) %>% 
+#   within({
+#     name <- factor(name, levels = c("Global", "Local", "Crude"))
+#     year <- as.numeric(as.character(year))
+#   }) %>% na.omit()
+# 
+# p0 <- ggplot(logCPUE) + 
+#   aes(x = year, y = value, colour = name, group = name) + 
+#   geom_line() + scale_colour_brewer(palette = "Set1") + ylab("log(CPUE)") +
+#   scale_x_continuous(breaks = c(1990, 1995, 2000, 2005, 2010, 2015, 2020)) +
+#   guides(colour = guide_legend(title = "Model")) + 
+#   theme(legend.position = "bottom",
+#         plot.margin = unit(c(0,30,0,30), "pt")) + 
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+# 
+# ptest <- p0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1)
+# 
+# npages <- n_pages(ptest)
+
+
+##-------------------------------------------------------------------------##
+
+CPUE <- pBLdat %>% 
+  select(year, blzone = blzone, Global = CE, 
+         Local = CE_l, Crude = CE_crude) %>% 
+  within({
+    is.na(Crude[Crude > 250]) <- TRUE
+  }) %>% 
+  pivot_longer(-c(blzone, year)) %>% 
+  within({
+    name <- factor(name, levels = c("Global", "Local", "Crude"))
+    year <- as.numeric(as.character(year))
+  }) %>% na.omit()
+
+
+q0 <- ggplot(CPUE) + 
+  aes(x = year, y = value, colour = name, group = name) + 
+  geom_line() + scale_colour_brewer(palette = "Set1") + ylab("CPUE") +
+  scale_x_continuous(breaks = c(1990, 1995, 2000, 2005, 2010, 2015, 2020)) +
+  guides(colour = guide_legend(title = "Model")) + 
+  theme(legend.position = "bottom",
+        plot.margin = unit(c(0,30,0,30), "pt")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) #+
+  #facet_wrap( ~ blzone, nrow = 1, ncol = 2)
+
+
+ptest <- q0 + facet_wrap_paginate( ~ blzone, nrow = 2, ncol = 1)
+
+npages <- n_pages(ptest)
+
+# for(page in seq(npages)) {
+#   pleft <- p0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+#   pright <- q0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+# 
+# 
+#   print(pleft + pright)
+#   # cat("\\pagebreak\n")
+# 
+# }
+
+```
+
+
+
+
+```{r plot_BS, echo =FALSE, eval=TRUE}
+#| fig-width: 10
+#| fig-height: 10
+
+#pagelist <- seq(1,length(grep("BS", levels(CPUE$blzone), value=FALSE))/4,1)
+#pagelist <- grep("BS", levels(CPUE$blzone), value=FALSE)
+
+for (page in seq(npages)) {
+
+print(q0 +  facet_wrap_paginate( ~ blzone,  nrow = 2, ncol = 1, page = page, drop=TRUE))
+
+}
+
+
+```
+
+
+
+```{r plot_N, echo =FALSE, eval=TRUE}
+#| layout-nrow: 2
+#| column: page
+#| output: true
+#| fig-width: 8
+#| fig-height: 8
+# pagelist <- grep("N", levels(CPUE$blzone), value=FALSE)
+# 
+# 
+# for( page in pagelist) {
+#   pright <- q0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 2, page = page)
+# 
+#   print( pright)
+# }
+
+
+```
+
+
+```{r plot_E, echo =FALSE, eval=TRUE}
+#| fig-width: 7
+#| fig-height: 7
+
+
+# pagelist <- grep("E", levels(CPUE$blzone), value=FALSE)
+# 
+# 
+# for( page in pagelist) {
+#   pleft <- p0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+#   pright <- q0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+# 
+# 
+#   print(pleft + pright )
+# }
+
+
+```
+
+
+```{r plot_W, echo =FALSE, eval=TRUE}
+
+
+# pagelist <- grep("W", levels(CPUE$blzone), value=FALSE)
+# 
+# 
+# for( page in pagelist) {
+#   pleft <- p0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+#   pright <- q0 + facet_wrap_paginate( ~ blzone, nrow = 1, ncol = 1, page = page)
+# 
+# 
+#   print(pleft + pright)
+# }
+
+
+
+```
+
+## Discussion
+
+### Spatial issues
+
+One message that seems fairly clear to us is that the spatial scale on which
+the model is fitted to the data is not such a crucial issue, as long as it
+takes in enough blocks to allow the penalisation aspect scope to do a useful
+job.  The per-zone models lead to very similar standardisation results for
+their blocks as does a single, all-of-fishery model.
+
+What does seem to be
+more of an issue is the size of the blocks themselves.  (Here 'size' refers
+to both the spatial extent and the amount of data the block generates.)  Where
+blocks are data sparse the model appears almost to ignore what little data is
+there and penalise almost right back to the grand mean level, i.e. what would
+have resulted using just a fixed `year` term to map biomass change and ignoring
+the blocks.  We suggest it might be useful to investigate some adjustment of the
+target regions, perhaps combining adjacent blocks where data is sparse.
+
+One objective of the project is to investigate how, and to what extent, spatial
+information may be useful in the assessment.  We suggest that a
+useful first step would be simply to link lats and longs to the current logbook
+data.  This would allow the longer logbook series to be used to check if it is
+at least likely that spatial information will likely prove useful in this regard.
+Even if lats and longs were only available for the centroids of the blocks
+themselves, this could be a start.  Currently all we have in the logbook data
+is the block label, making even adjacency unknown.
+
+### Data issues
+
+These notes have so far been confined to the Blacklip data, only.  It is clear
+from the data that there has been some initial splitting of data into Blacklip and
+Greenlip catch, and presumably of fishing hours as well.  It would be very satisfying
+to know the details.  There are some anomalies in the record
+that we have had to work around to make the models work, such as zero or near zero
+fishing hours but with large catches.  
+
+One outcome that leaps out is the importance of the `propblip` variable, presumably
+already used to split the catch and effort, but remaining an important predictor in the
+standardisation model.  This suggests that perhaps the split has not been quite as
+good as it might be.  It would be useful to know how this variable was derived,
+what is its accuracy and how has it already been used.
+
+The data record contains no zero catches, which surprises me, (but it does contain
+zero or very near zero fishing hours, as noted).  This also seems surprising.  Were
+zero catch records excluded for some reason?
+
+### Standardisation issues
+
+We suggest that this approach to standardisation, using a modelling approach that
+uses data from some large number of blocks simultaneously has a number of advantages
+and should be considered, possibly not as a replacement for the present methods but
+as a complementary method.  At present the modelling approach offers some insight
+that a block-by-block modelling approach cannot; using random effects it can use
+the context far more effectively, providing answers for sparse data blocks that the
+previous method cannot, or cannot do safely.  On the other hand it does rely on a
+strong assumption that such context information is indeed relevant and useful.
+
+We do not suggest the modelling approach we have outlined here is necessarily
+best, particularly not at the early stage of development sketched here,
+but we do suggest that the general strategy is worth considering.
+
+

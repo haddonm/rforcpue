@@ -1,0 +1,653 @@
+# Catch-rate standardisation strategy {#sec-chapter2}
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+source("_common.R")
+library(mixedup)
+
+```
+
+```{r, echo=FALSE}
+#| cache: false
+#| warning: false
+#| message: false
+
+## set datadir
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+
+## load SAUmaster index
+saumaster_bl <- readxl::read_xlsx(file.path(datadir, "SAU_Master.xlsx"))
+
+## Load KUD objects
+
+all_kud_data <- readRDS(file.path(datadir, "AllKud75_production_2021.rds"))
+
+#all_kud_data_climate <- readRDS(file.path(datadir, "Climate_sfkud_2023_03_07.RDS")) 
+
+
+# kud_centroid <- all_kud_data %>% st_centroid() 
+# xy <- st_coordinates(kud_centroid) %>% 
+#   data.frame() %>% 
+#   setNames(c("easting", "northing"))
+# all_kud_data <- cbind(all_kud_data, xy)
+
+all_kud_data <- all_kud_data %>% 
+  filter(year(plaindate) > 2011) %>% 
+  within({
+   blockno[subblockno == "05D"] <- 6
+   subblockno[subblockno == "05D"] <- "06A"
+   
+  }) %>% 
+  left_join(saumaster_bl, 
+                    by = c("zone" = "newzone" , "blockno", "subblockno"))
+
+all_kud_data$SAU <- all_kud_data$SAU_CREF
+
+
+
+## Load Docketbook data - Most recent
+abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+#abCEgl <- readRDS("C:/Users/cmundy/Dropbox/AbaloneData/Climate_logbook_gl_2023_03_07.RDS")
+
+abCEbl <- abCEbl %>% within({
+  zone <- newzone
+}) %>% left_join(saumaster_bl, 
+                    by = c("zone" = "newzone", "blockno", "subblockno")) %>% 
+  filter(fishyear < 2023)
+
+
+abCEbl$SAU <- abCEbl$SAU_CREF
+
+
+source("aggregateDiveData.R")
+source("SAU_stndFuns.R")
+```
+
+```{r}
+mapdata <-
+  l_day_data %>% filter(#zone %in% c("W", "E") & blockno %in% c(12, 21, 29) &
+                            SAU %in% c("SAU5", "SAU7", "SAU11", "SAU12IN", "SAU13", "SAU21", "SAU49BS", "SAU53") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+mapdata <- mapdata %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+dat_list <- split(mapdata, mapdata$SAU)
+
+
+d_day <-
+  d_day_data %>% filter(#zone %in% c("W", "E") & blockno %in% c(12, 21, 29) &
+                            SAU %in% c("SAU5", "SAU7", "SAU11", "SAU12IN", "SAU13", "SAU21", "SAU49BS", "SAU53") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+d_day <- d_day %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+d_day_list <- split(d_day, d_day$SAU)
+
+
+```
+
+
+```{r IPC}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+vc_out <- map2(dat_list, "logrtime", vc_check_lme4)
+vc_out_dock <- map2(d_day_list, "docktime", vc_check_lme4)
+
+#vc_out <- map2(dat_list, "logrtime", vc_check_TMB)
+
+diag_vc <- map_dfr(vc_out, mod_vc_lme4)
+diag_vc_dock <- map_dfr(vc_out_dock, mod_vc_lme4)
+#diag_vc <- map_dfr(vc_out, mod_vc_TMB)
+
+
+rownames(diag_vc) <- names(vc_out)
+diag_vc$SAU <- rownames(diag_vc)
+
+rownames(diag_vc_dock) <- names(vc_out_dock)
+diag_vc_dock$SAU <- rownames(diag_vc_dock)
+
+# vc_out[[3]] %>% as_flextable()
+# vc_out_dock[[3]] %>% as_flextable()
+```
+
+```{r mod_diags}
+#| echo: false
+#| warning: false
+#| message: false
+mod1_out <- map2(dat_list, "logrtime", stnd_fun_lme4)
+
+
+## intra-class correlation coefficient
+icc_mod1 <- map(mod1_out, mod_icc_fun)
+
+## Model diagnostics and marginal/conditional R2 
+diag_mod1 <- map_dfr(mod1_out, mod_diag_fun)
+rownames(diag_mod1) <- names(mod1_out)
+diag_mod1$SAU <- rownames(diag_mod1)
+
+
+## Contribution of Random Effects
+raneff_vc <- list_rbind(map(mod1_out, raneff_prop), names_to = "SAU")
+
+
+```
+
+## Introduction
+
+Central to any assessment of fishery performance is the availability of a valid time-series of an index of relative abundance. All Australian abalone fisheries assume that commercial catch-rates provide such an index, although in some cases, this is assumption should have caveats relating to hyperstability, a lack of contrast through time following the introduction of quota systems, and the inherent variation expected with abalone fishery statistics.
+
+Before use in an assessment, ideally, catch-rates should be standardised. Statistical standardisation of catch-rates seek to identify and account for variation in the available data that is not a feature of the temporal trend in abalone abundance, and may include variables relating to gear types, fisher identity or spatial and environmental variables that may exert an influence on catch-rate trends [ @hsu2022; @maunder2004; @tanakak.r.2022; @thorson2023]. Given the wildly different character of different commercial fisheries, there is no single best approach to such standardisation. For example, there are many different views on what predictor variables should be used, whether variables should be considered fixed, continuous or random, and the extent of any interactions between terms in the model. In the literature, that discussion appears never-ending and at least partly reflects the many different situations exhibited by different fisheries. Whether such discussion has value in practical terms is also debatable. For example, in many cases, providing the statistical model is constructed validly, the choice of whether to include a term as a random or fixed effect often makes relatively little difference.
+
+This chapter establishes a common base statistical mixed effects model to be applied to both docket- and logger-based datasets. Additional predictor variables may be added to the base model to address questions of specific interest, or for specific regions, or even individual assessment areas within the fishery.
+
+This chapter links to two objectives:
+
+Objective 1: **Characterise the statistical properties, consistency, interpretability and assumptions of spatial and classic indicators of fishery performance.**
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.**
+
+### Statistical Models
+
+The traditional performance measure in abalone fisheries is catch per unit effort (CPUE), with Effort represented by time (in water dive time) and Catch as kilograms of abalone landed, summed across all dives for a day. 
+
+*"The Trouble with Ratios: an Overview*
+
+*Unless there is reason to believe that the regression passes through the origin, the ratio is of dubious value. It may do for rough work, but careful experimentation deserves a more efficient statistical method."*[^chapt-02-standardisation-strategy-1]
+
+[^chapt-02-standardisation-strategy-1]: George Snedecor (in: @curran-everett2013 p. 213)
+
+While we use the ratio CPUE religiously in abalone fisheries, it might be argued that the actual metric of interest is, how much catch can be achieved for a given unit of effort rather than the ratio of catch and effort. A more relevant question to ask of the data is, has the level of catch achieved per unit of effort changed over time. In the Tasmanian abalone fishery divers set out for the day with a known amount of catch to achieve and make decisions on where to fish based on their prior knowledge of where they are likely, or hopeful, of achieving that catch within the dive time allowed (or in sufficient time to meet the processor truck at the boat ramp at the pre-agreed time). Divers will also count as they fish, knowing that for every minute they spend in the water they need to achieve a certain level of catch. Divers, however, are familiar with and understand the ratio CPUE, perhaps largely because we have trained them over the past four decades to think this is the best way to examine performance of an abalone fishery.
+
+The classic approach for statistical modelling of catch-rates is to use the ratio of catch per unit effort (CPUE) as the dependent (Mod0), with a number of explanatory or independent variables which may be categorical or continuous, and fixed or random depending on ones philosophical leaning. Abalone fisheries are well known for high levels of spatial variation in productivity and catch-rates, and this is addressed by including a within SAU predictor, in this case sub-block ('subblockno'). Fishers also have different strategies and diving behaviour, while in most locations we expect catch-rates to be influenced by season, for example higher levels of seaweed biomass during summer months affects catchability. We expect "among diver" and "among season" to contribute substantially to overall variation, and predictors are included for both these factors. Previously, the typical abalone standardisation model for example was:
+
+```{r Mod0, echo = TRUE}
+
+Mod0 <- CPUE ~ 
+        fishyear +
+        subblockno +
+        diver_id +
+        fishmonth
+
+```
+
+Where all predictors are treated as fixed effects.
+
+As most of our predictors are included to account for variability other than the effect of year, we should consider whether our additional predictors should be included as random effects. Where the number of levels in a random predictor is small (i.e. \< 5) the practical difference between treating subbockno as either fixed or random will be small. The estimated values of a random effect are known as 'BLUP's (Best Linear Unbiased Predictions), and can be considered equivalent to parameter estimates for a fixed effect. The major difference between treating a predictor as a random or fixed effects is that the BLUPs are penalised, and provide some protection for levels of a factor that might be quite disparate to other levels, particularly where the number of samples in that level are marginal. Overall, treating a predictor such as subblockno as random takes advantage of a phenomenon known as 'borrowing strength', by assuming some similarity between individual levels (see for example, common trends among sub-blocks below in [@fig-5]). This provides a desirable feature for many of the SAUs where there is considerable heterogeneity in where fishers are active among seasons or among years, and often with small numbers of fishers with extensive local knowledge.
+
+Rather than use the CPUE as a ratio response variable, an alternative option is to model catch as the response variable and specify effort as an offset in the right hand side of the equation. This provides an identical outcome to using the catch-rate ratio as the response variable, but provides more flexibility when back-casting to predict annual mean catch-rate as part of the standardisation process. Rather than producing a time-series of annual mean CPUE, we can instead examine a time-series of the relative change in catch achieved for a given unit of effort (e.g. 1 hour), where log(effort) is included as an offset in the linear model. When we back-cast to estimate the catch achieved for 1 hour of effort, the output of this formula structure is identical to that from a model with the ratio CPUE as the dependent (i.e. Mod0). Combining these two alternative approaches (mixed effects, offset(log(catch))), we have a model form such as (Mod1).
+
+```{r Mod1, echo = TRUE}
+
+Mod1 <- log(catch) ~ offset(log(time))  +
+        fishyear +
+        (1 | subblockno) +
+        (1 | subblockno:fishyear) +
+        (1 | diver_id) +
+        (1 | fishmonth)
+
+```
+
+## Methods
+
+All mixed effect model and spatial analyses were conducted using R statistical software [@base]. The sf package [@sf] was used to manage spatial objects within R throughout. A mixed-effects model (Mod1) was applied to the GPS logger time-series, with data aggregated by diver fishing day within the smallest scale reported on docket books (i.e. sub-blocks). A Log-normal model is used throughout, implemented using the r package glmmTMB [@glmmTMB]. The performance package [@performance] was used to obtain diagnostics and Conditional and Marginal R^2^ values, and Intra-class correlation coefficents for the fitted models. The mixedup package [@mixedup] was used to extract variance components for random effects. Standardised catch-rates are plotted with the ggplot package [@ggplot2], and multi-plot arrangements were composed with [@patchwork]. General functions within the tidyverse [@tidyverse] as well as base R were used to coerce and re-shape data as required. Tables were produced using the flextable package [@flextable]. Data were batch processed using custom functions and the purrr package [@purrr].
+
+An informal proportionality check (IPC) of catch and effort variables can be calculated with a minor re-arrangement of model terms, with offset(log(catch) replaced with log(catch) such that log(catch) becomes a continuous term in the model rather than as an offset. The IPC is the coefficient for log(catch), with an expected value of 1, which would confirm that a unit increase in effort achieves a unit increase in catch (Venables, pers comm). Marginal and conditional R^2^ values are also calculated to provide an indicator of how well the model captures variation in the dataset. Marginal R\^2 indicate the variance accounted for by the fixed effects in the model and the Conditional R^2^ indicate the variance accounted for by the full model (fixed and random). Standard Residual and QQ plots are used to test whether assumptions of normality and variance are met adequately.
+
+Statistical properties and diagnostics are explored in detail for a subset of Spatial Assessment Units (SAU). The IPC, R^2^ values, and contribution of random effects are conducted on a selection of SAUs, while more detailed analyses are done for two SAUs - SAU5 and SAU11. The following base model formula was applied to each of the example SAUs:
+
+`r format(formula(mod1_out$SAU5))`
+
+A consideration of a range of standardisation approaches and the contribution of several environmental variables are detailed in the Appendix (Chapters 10-12).
+
+## Results
+
+### Informal proportionality check
+
+IPC values for all SAUs examined here are close to the expected value of 1. Two notable exceptions are SAU21 and SAU49 where the IPC is 0.94 and 0.91 respectively ([@tbl-IPC]). This simple check provides confidence that the data conform to the expectation that catch is proportional to effort. 
+
+```{r}
+#| label: tbl-IPC
+#| tbl-cap: "Logger data: Informal proportionality check for three Spatial Assessment Units (SAUs) in the Tasmanian abalone fishery."
+#| echo: false
+#| warning: false
+#| message: false
+diag_vc |> flextable(col_keys = c("SAU", "ipc")) |>
+  colformat_double(j = c(2),
+                   digits = 2,
+                   na_str = "N/A") |>
+  set_header_labels(SAU = "SAU")
+
+```
+
+```{r}
+#| label: tbl-IPC-dock
+#| tbl-cap: "Docketbook data: Informal proportionality check for three Spatial Assessment Units (SAUs) in the Tasmanian abalone fishery."
+#| echo: false
+#| warning: false
+#| message: false
+diag_vc_dock |> flextable(col_keys = c("SAU", "ipc")) |>
+  colformat_double(j = c(2),
+                   digits = 2,
+                   na_str = "N/A") |>
+  set_header_labels(SAU = "SAU")
+
+```
+
+
+
+
+### Marginal and Conditional R^2^
+
+Marginal R^2^ (\~ fixed effects) was low for all SAUs examined ([@tbl-R2]). In the base model, the only fixed effect is Year (fishyear), with random effect terms accounting for much of the variation. The Conditional R^2^ (both fixed and random effects) ranged from 0.30 to 0.70 for the SAUs examined. The relatively low level of variance explained suggests there are drivers not included in the model contributing to variation in the dataset. These may include spatial or environmental drivers, or, may reflect the high levels of variation commonly observed in commercial fisheries data (See(@fig-dailycpue in @sec-chapter3 for an expansion of this issue).  \newpage
+
+```{r}
+#| label: tbl-R2
+#| tbl-cap: "Marginal (R2_M) and Conditional(R2_C) R^2^ for three Spatial Assessment Units (SAUs) in the Tasmanian abalone fishery."
+#| echo: false
+#| warning: false
+#| message: false
+diag_mod1 |> flextable(col_keys = c("SAU", "R2_marginal", "R2_conditional")) |>
+  colformat_double(j = c(2, 3),
+                   digits = 2,
+                   na_str = "N/A") |>
+    width(j = c(2:3), width = 40, unit = "mm") |>
+  set_header_labels(SAU = "SAU") |> autofit()
+```
+
+
+
+### Intra-class correlation coefficient
+
+Of interest is the whether replicates within a grouping variable (random effect) resemble each other. The Intra-class correlation coefficient (ICC) provides a measure of within-group repeatability i.e. are records within a level within a group more similar to each other than to records in another level within the same group. Notably, our model term for seasonality (fishmonth) suggests there is very little repeatability within months (@tbl-icc). ICC values close to zero suggest there might be little benefit in setting that model term as a random effect.  Only two terms - diver_id and subblockno show moderate levels of repeatability, but the patterns are not consistent across SAUs.
+
+```{r}
+#| label: tbl-icc
+#| tbl-cap: "Intra-class correlation coefficient of individual random effects in the model."
+#| echo: false
+#| warning: false
+#| message: false
+
+icc_df <- unlist2d(icc_mod1) |>
+   rename(SAU = .id, modterm = Group) %>% 
+  arrange(SAU, modterm) %>%  
+  pivot_wider(names_from = "modterm", values_from = "ICC" ) %>% 
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+  icc_df |>  flextable() |>
+  colformat_double(digits = 2,
+                   na_str =  "")  |> 
+  fontsize(size = 10) |>
+  width(j = 5, width = 40, unit = "mm") |>
+  width(j = c(1:4), width = 20, unit = "mm") |>
+  line_spacing(space = 1, part = "all")
+
+
+```
+
+
+
+### Contribution of individual random effects to the model
+
+For most SAUs diver identity was the most important random effect in the model, whereas the sub-block effect (representing areas within each SAU) was relatively unimportant. Whereas for SAU49 and SAU53, the relative importance of these two random effects were reversed ([@tbl-varcomp]). Month of year was of negligible importance across all the SAUs examined here, with SAUs representing western, eastern, northern, and Bass Strait regions of the Tasmanian Abalone fishery. The relative contribution of random effects are almost identical to the ICC values.
+
+```{r}
+#| label: tbl-varcomp
+#| tbl-cap: "Contribution (% explained) of individual random effects to the model."
+#| echo: false
+#| warning: false
+#| message: false
+
+rans <- raneff_vc %>% dplyr::select(SAU, group, var_prop) %>%  pivot_wider(names_from = SAU, values_from = var_prop) 
+
+# rans |>  flextable() |>
+#   colformat_double(digits = 3,
+#                    na_str =  "")  |> 
+#   fontsize(size = 10) |>
+#   width(j = 1, width = 26, unit = "mm") |>
+#   width(j = c(2:9), width = 17, unit = "mm") 
+
+## transpose all but the first column (name)
+t_rans <- t(rans) |>  as.data.frame() 
+colnames(t_rans) <- t_rans[1,]
+t_rans <- t_rans[-1,] |> rownames_to_column(var = "SAU")
+
+t_rans |>  flextable() |>
+  colformat_double(digits = 2,
+                   na_str =  "")  |> 
+  fontsize(size = 10) |>
+  width(j = 3, width = 40, unit = "mm") |>
+  width(j = c(1,2,4:6), width = 20, unit = "mm") |>
+  line_spacing(space = 1, part = "all")
+
+
+
+
+
+
+```
+
+### Case Study: SAU5 Northern Zone (Blocks 5 & 6)
+
+Model diagnostics for the SAU5 dataset indicate reasonable adherence to assumptions required of data analysed with linear mixed-effect model. Normality of the residuals is perhaps the most concerning ([@fig-5diag]), although typical of fisheries data where the density of data points is sparse at the lower end and to a lesser extent at the upper end. Noting that a log-normal model is applied, the diagnostics for this linear mixed-effect model don't suggest any cause for concern that might require action.
+
+```{r}
+#| label: fig-5diag
+#| fig-cap: "SAU5: Model diagnostics)"
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 10
+#| echo: false
+#| warning: false
+#| message: false
+
+
+mod5 <- mod1_out$SAU5
+# performance::check_singularity(mod)
+# summary(mod)$varcor
+
+# mod5 |> MASSExtra::drop_term()
+# mod5 |> MASSExtra::drop_term() |> plot()
+
+
+
+mod_plots <- plot(check_model(mod5 , panel = FALSE))
+
+selectdiags <- (mod_plots[[1]] + mod_plots[[2]]) / (mod_plots[[3]] + mod_plots[[4]]) /
+  (mod_plots[[6]] + mod_plots[[7]])
+
+selectdiags
+```
+
+```{r}
+dat <- mapdata %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU5") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+
+```
+
+```{r, echo=FALSE}
+# pdat <- with(dat,
+#                  expand.grid(logrtime = 60, 
+#                              # diver_ex = median(sau12in$diver_ex),
+#                              fishyear = levels(fishyear) |> factor(),
+#                              subblockno = levels(subblockno) |> factor())) |>
+#   within({
+#     year <- as.numeric(as.character(fishyear))
+#   })
+
+
+#get_call(mod5 )
+
+pdat <- dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    logrtime <- 60
+    diver_id <- dat$diver_id[1]
+    fishmonth <- dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+SAU5_n <- nrow(dat)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+vc <- VarCorr(mod5)$cond
+s2 <- sigma(mod5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+### start by hand glmmTMB
+# pdat$fmod_BC <- (predict(mod5 , newdata = pdat, re.form = ~0) + s2/2) |> exp()
+# x <- ranef(mod5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat |> left_join(x) |> left_join(y)
+# pdat$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+## end by hand
+
+pdat <- pdat
+pdat$fmod_BC <- exp(predict(mod5, pdat, re.form = ~0) + s2/2)
+pdat$pmod_BC <- exp(predict(mod5, pdat, re.form = ~(1|subblockno) + 
+                               (1|subblockno:fishyear)) + s2c/2)
+
+```
+
+#### Standardised catch per 1 hour of diving effort
+
+An advantage of the base statistical model is that the SAU wide trend can be presented, while accounting for variation among sub-blocks within the SAU. Additionally, via the partial interaction term (1 \| subblock:fishyear) we can also examine the trends of individual sub-blocks across the same time-series ([@fig-5]). Sub-block 5A, while one of the top two sub-blocks in this SAU in terms of production, has always had a substantially lower catch-rate ([@fig-5], [@fig-5facet]). Despite this, the trend in catch per 1 hour of effort is very similar across all subblocks.
+
+```{r}
+#| label: fig-5
+#| fig-cap: "SAU5: glmmTMB - Log-normal CPUE standardisation (including bias correction). Response variable is log(catch), with log(effort) included as an offset. Black line indicates SAU mean catch-rate, and the coloured lines relate to the trend in each specific subblock, and the coloured lines relate to the trend in each specific subblock."
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+p1TMB <- ggplot(pdat) + aes(x = year, y = pmod_BC, colour = subblockno) + 
+  geom_point(size=0.75) + geom_line(linewidth=0.75) + 
+  geom_point(aes(y = fmod_BC), colour = "black", size=1) + 
+  geom_line(aes(y = fmod_BC, group = subblockno), colour = "black", linewidth=1.1) +
+  theme(legend.position = "bottom") + 
+  labs(y = "CPUE", title = "Lognormal model (independence)") + 
+  scale_color_brewer(palette = "Set1")
+p1TMB
+```
+
+```{r}
+#| label: fig-5facet
+#| fig-cap: "SAU5: glmmTMB - Log-normal CPUE standardisation (including bias correction) - facet plot. Black line indicates SAU mean catch-rate, and the coloured lines relate to the trend in each specific subblock, and the coloured lines relate to the trend in each specific subblock."
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+p1TMB + facet_wrap(~subblockno, ncol = 2) + theme(legend.position = "none")
+```
+
+```{r}
+#| label: fig-11diag
+#| fig-cap: "SAU11: Model diagnostics)"
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+
+mod11 <- mod1_out$SAU11
+# performance::check_singularity(mod11 )
+# summary(mod11 )$varcor
+
+# mod11 |> MASSExtra::drop_term()
+# mod11 |> MASSExtra::drop_term() |> plot()
+
+
+mod_plots <- plot(check_model(mod11 , panel = FALSE))
+
+selectdiags <- (mod_plots[[1]] + mod_plots[[2]]) / (mod_plots[[3]] + mod_plots[[4]]) /
+  (mod_plots[[6]] + mod_plots[[7]])
+
+selectdiags
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+dat <- mapdata %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU11") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+#get_call(mod11 )
+
+pdat <- dat |> 
+  select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear, subblockno) |>
+  within({
+    logrtime <- 60
+    diver_id <- dat$diver_id[1]
+    fishmonth <- dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+SAU11_n <- nrow(dat)
+
+
+```
+
+### Case Study: SAU11 Western Zone (Block 11)
+
+Diagnostics for SAU11 are similar to those for SAU5, even though SAU11 has a much greater level of fishing activity (SAU11 `r SAU11_n` records; SAU5 `r SAU5_n` records). Non-Normality of the residuals in SAU11 follows a similar pattern to SAU5. As for SAU5, most subblock catch rates follow a similar trend to the SAU wide trend. This may explain why the ICC and \% variance explained for subblocks is consistently low - i.e the subblocks are essentially correlated. For SAU11 however, two subblocks however show different trends over the time series; subblock 11D had the lowest catch per unit effort at the start of the time-series, but the second highest by the end of the time-series, while subblock 11A had the highest catch per unit effort in 2012, and the lowest by 2019. While these two subblocks have slightly different trajectories, they remain largely in parallel. 
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+vc <- VarCorr(mod11)$cond
+s2 <- sigma(mod11)^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+s2c <- sigma(mod11)^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+### start by hand
+# pdat$fmod_BC <- (predict(mod11 , newdata = pdat, re.form = ~0) + s2/2) |> exp()
+# x <- ranef(mod11 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod11 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat |> left_join(x) |> left_join(y)
+# pdat$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+## end by hand
+
+
+pdat <- pdat
+pdat$fmod_BC <- exp(predict(mod11, pdat, re.form = ~0) + s2/2)
+pdat$pmod_BC <- exp(predict(mod11, pdat, re.form = ~(1|subblockno) + 
+                               (1|subblockno:fishyear)) + s2c/2)
+
+
+```
+
+```{r}
+#| label: fig-11
+#| fig-cap: "SAU11: glmmTMB - Log-normal CPUE standardisation (including bias correction).  Response variable is log(catch), with log(effort) included as an offset. Black line indicates SAU mean catch-rate, and the coloured lines relate to the trend in each specific subblock, and the coloured lines relate to the trend in each specific subblock."
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+p1TMB <- ggplot(pdat) + aes(x = year, y = pmod_BC, colour = subblockno) + 
+  geom_point(size=0.75) + geom_line(linewidth=0.75) + 
+  geom_point(aes(y = fmod_BC), colour = "black", size=1) + 
+  geom_line(aes(y = fmod_BC, group = subblockno), colour = "black", linewidth=1) +
+  theme(legend.position = "bottom") + 
+  labs(y = "CPUE", title = "Lognormal model (independence)") + 
+  scale_color_brewer(palette = "Set1")
+p1TMB
+```
+
+```{r}
+#| label: fig-11facet
+#| fig-cap: "SAU11: glmmTMB - Log-normal CPUE standardisation(including bias correction) - facet plot. Black line indicates SAU mean catch-rate."
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+p1TMB + facet_wrap(~subblockno, ncol = 2) + theme(legend.position = "none")
+```
+
+## Discussion
+
+A log-normal model was fitted using two R packages - glmmTMB [@glmmTMB] and lme4 [@Bates2015].  The lme4 package has been chosen as for statistical standardisation of Tasmanian abalone catch-rates, largely due to the ease of prediction methods for back-casting to obtain a standardised catch rate. When attempting to fit a log-normal model using lme4 [@Bates2015] or a gamma model using either lme4 or glmmTMB packages, convergence warnings were common, primarily for singularity, and always driven by the subblock factor having negligible or zero variance. An automated switch was applied such that for SAUs with less than four subblock levels, the subblockno and subblockno:fishyear terms were removed from the model. Implementation of the filter resolved the majority of convergence warnings when useing the lme4 package.  
+
+The base statistical model outlined here for statistical standardisation of Tasmanian abalone catch-rates provides a number of benefits in terms of flexibility, while accounting for key factors affecting fishing performance. The minimal contribution however, of the sub-block factor to model variance in most SAUs was unexpected (this is explored further in @sec-chapter3). When using the fishery docket data some of level of inaccuracy in reporting at the sub-block scale is expected, but that does not apply in the GPS logger program examples provided here. GPS logger program data maps sub-block onto the dataset using a spatial join between each dive polygon and a zone polygon with zone, region, SAU, block, and sub-block attributes.
+
+An emerging characteristic of the Tasmanian GPS logger program data, is that different parts of the fishery have different drivers in terms of spatial structure. For this reason, a relatively simple base model, optimised for each SAU with additional variables where available is a better approach than attempting to apply a more complex model throughout. The model residual term accounted for the majority of data variance  for all SAUs. Whether this simply that other factors are more important than those included in the base model, or there is a high level of noise in fisheries catch rate data is examined in the next chapter (@sec-chapter3). 
+
+

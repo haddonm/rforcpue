@@ -1,0 +1,405 @@
+# FIS vs CPUE {#sec-chapter13}
+
+```{r include=FALSE, echo = FALSE}
+
+knitr::opts_chunk$set(
+	fig.align = "center",
+	fig.show = "hold",
+	message = FALSE, 
+	warning = FALSE,
+	comment = "",
+	out.width = "90%",
+	echo = TRUE
+)
+options(knitr.kable.NA = '')
+
+
+#Load required libraries
+library(sp)
+library(sf)
+library(tidyverse)
+library(lubridate)
+library(tmap)
+library(ggpubr)
+library(cowplot)
+
+
+## prepare WGS84 and GDA55 CRS
+
+GDA94_SF <- st_crs(28355)
+WGS84_SF <- st_crs(4326)
+
+
+```
+
+```{r datain}
+#| echo: false
+#| warning: false
+#| message: false
+
+## Reminder: All zones except Eastern Zone are missing January 2012
+
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+## Long form (Sequential stack of years) of hexagonal grid data 2012 - 2019 (Blacklip & Greenlip)
+
+gridlong <- sf::st_read(file.path(datadir, "g1halong_2020-03-24.gpkg"), quiet = TRUE)  
+
+## Filter gridlong to Eastern zone and year > 2014
+grid <- subset(gridlong, zone == "E" & fishyear > 2014)
+
+## GRID data retrieval
+## Wide form of grid data 2012 - 2019 (All cells containing Blacklip catch)
+gridwideBl <- sf::st_read(file.path(datadir, "g1hawideBl_2020-03-24.gpkg"), quiet = TRUE)
+
+## Wide form of grid data 2012 - 2019 (All cells containing Greenlip catch )
+#gridwideGl <- readRDS(file.path(datadir, "g1hawideGL_2020_03_06.rds"))
+
+## KUD data retrieval
+## Reminder: All zones except Eastern Zone are missing January 2012
+#kud90 <- readRDS(file.path(datadir, "AllKud90_2020_03_24.rds"))
+#kud75 <- readRDS(file.path(datadir, "AllKud90_2020_03_24.rds"))
+#kud50 <- readRDS(file.path(datadir, "AllKud90_2020_03_24.rds"))
+#kud25 <- readRDS(file.path(datadir, "AllKud25_2020_03_24.rds"))
+
+kud90 <- sf::st_read(file.path(datadir, "allkud_90_2020-03-24.gpkg"), quiet = TRUE) 
+
+## Filter kudXX to Eastern zone and year > 2014
+kud <- subset(kud90, zone == "E" & fishyear > 2014)
+
+```
+
+## Introduction
+
+Fishery Independent Surveys (FIS) of abalone abundance conducted by researchers are assumed to be the gold standard for assessing biomass. Rarely though is there a direct comparison of FIS abundance and CPUE, where fishing activity overlaps with survey sites. Tasmania has run a small pilot study over several years, undertaking a transect based FIS program at a select number of sites across the East coast. While the small number of sites are not adequate for estimation of stock biomass, or as general indicator of abundance, Without going into details around what FIS results might mean (indicator of biomass, Dynamic Pool assumptions, representativeness etc.), data from the pilot study and our spatial data collection program can form the basis of an investigation on the relationship between FIS and CPUE.
+
+## Methods
+
+The Tasmanian FIS data set is comprised of randomised belt transects within fixed sites (LEG), and, randomly placed fixed Abalone Recruitment Modules (ARM) at the same sites.
+
+-   ARM = data on cryptic juvenile abalone abundance.\
+-   LEG = data on emergent abalone abundance visible to divers.
+
+The belt transects followed the design of @mundy2010, with a fixed site of 60m x 30m and 10 replicated 15m x 1m belt transects, randomised along and either side of a central baseline. Counts of abalone are converted to a mean density (abalone/m2) for each survey at each site. A description of the ARM design and data are detailed in @mundy2018. Counts of juvenile abalone recorded beneath ARMs are converted to a mean density (abalone/m2) for each survey at each site. Spatial coordinates (Eastings and Northings, GDA94) obtained using handheld GPS, are included in the dataset.
+
+```{r PreFIS, echo=FALSE}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+tas_fis <- st_read(file.path(datadir, "tas_fis_survey_data_2019-07-05.shp"), quiet = TRUE)
+
+## apply CRS to kud
+st_crs(tas_fis) <- WGS84_SF
+
+## conver date from POSIXlt to POSIXct
+tas_fis$survdate <-   as.POSIXct(tas_fis$date)
+tas_fis$date <- NULL # remove original date field
+
+## transform to planar (2D) CRS
+tas_fis <- st_transform(tas_fis, st_crs(kud90))# reproject to GDA94/MGA55
+
+
+
+```
+
+```{r FIS, echo=FALSE}
+
+## split FIS data into ARMs and LEGs
+#nrow(tas_fis)
+tas_legs <- subset(tas_fis, grepl("_LEG_", site))
+#nrow(tas_legs)
+tas_arms <- subset(tas_fis, grepl("_ARM_", site))
+#nrow(tas_arms)
+
+## Check split captured all records
+#all.equal(nrow(tas_fis), (nrow(tas_legs) + nrow(tas_arms)))
+
+#str(tas_legs) # characterize each field
+#str(tas_arms) # characterize each field
+```
+
+### Spatial overlay of FIS and fishing events: Dive polygons
+
+Individual Fishing events that overlapped any FIS site are identified using a simple spatial join. KUD polygons are extracted where the polygon contains or intersects the centroid of the FIS site. Once all overlapping KUDs are found, the time difference between the KUD event and the survey events is determined, and then a matching pair with the smallest time difference interval is identified for use in the analyses, and run for both the FIS-Transect data and the FIS-ARM data.
+
+```{r Overlay1, echo=FALSE}
+## Spatial overlay using the geos::gIntersection function
+## 
+
+leg_polygons <- kud %>%
+  st_join(tas_legs,
+          join = st_intersects, 
+          left = TRUE) %>% filter(!is.na(site))
+
+```
+
+```{r Map1, echo=FALSE}
+#| label: fig-BR-KUD
+#| fig-cap: "Dive polygons that overlaps the Black Reef FIS site. The red dot indicates the center of the FIS site."
+#| fig-pos: "H"
+
+## Display the fishing events and FIS site in context
+## Pick the Black Reef Boulder transect site as an example
+pick.poly <- which(leg_polygons$site == "BRB_LEG_1")
+pick.leg <- which(tas_legs$site == "BRB_LEG_1")
+
+
+## plotting plotting dive events intersecting the Black Reef site with tmap::tm_shape
+tm_shape(leg_polygons[pick.poly, ], unit = "meters") +
+  tm_polygons(
+    breaks = seq(20, 120, 20),
+    c("blip_gps_cpue"),
+    alpha = .7,
+    n = 7,
+    midpoint = NA,
+    palette = "-Spectral"
+  ) +
+  tm_shape(tas_legs[pick.leg, ]) +
+  tm_symbols(size = 1, col = "red") +
+  tm_scale_bar(position = c("right", "top"))
+
+```
+
+The majority of matched fishing events and transect surveys are within 100 days (@fig-BR-timediff-freq), although there are some matching pairs where the time difference exceeds 12 months. When the time difference between spatially overlapping events is this large, we should be cautious about assuming the relationship is current. Here we restrict the matching pairs by setting a threshold time difference of ± 60 days of the transect survey event. The above process is repeated for the ARM dataset for abalone juvenile abundance.
+
+```{r Overlaytime, echo=FALSE}
+#| label: fig-BR-timediff-freq
+#| fig-cap: "Frequency distribution of time-difference between fishing events and survey events."
+#| fig-pos: "H"
+#| warning: false
+
+## Calculate difference between FIS survey date and fishing date
+leg_polygons <- leg_polygons %>% 
+  mutate(datediff = difftime(dvstart, survdate, units = "days"))
+
+## Filter based on the closest date match between fishing and survey
+leg_polygons_closest <- leg_polygons %>% group_by(diveid) %>% slice(which.min(abs(datediff))) %>% 
+  mutate(plusminus = sign(round(as.numeric(datediff))))
+
+ leg_polygons_closest %>% ggplot(aes(x=round(as.numeric(datediff)))) + 
+   geom_histogram(aes(y=..density..)) + 
+   geom_density(aes(y=..density..))
+
+
+```
+
+### Spatial overlay of FIS and fishing: Hexagonal grid polygons
+
+The alternative to examining the relationship between individual fishing events and research surveys is to explore the relationship between survey density and annual harvest per one hectare grid cells (@fig-BR-GRID). We apply the same approach used for the KUD polygons, but with a subtle twist. As part of the point-in-polygon analysis that generates the grid data sets, we determine the date of first and last fishing events in each cell, for each year. If we calculate the difference between the research survey date and the date of first fishing in each grid cell that overlays the survey site, we can make sure that we assign the grid cell from the current year of fishing to the corresponding research density.
+
+```{r GridLEGpointsoverlay, echo=FALSE}
+
+leg_grid <- grid %>%
+  st_join(tas_legs,
+          join = st_intersects, 
+          left = TRUE) %>% filter(!is.na(site))
+
+## Calculate difference between FIS survey date and first fishing date
+leg_grid <- leg_grid %>% 
+  mutate(datediff = difftime(firstfishing, survdate, units = "days"))
+
+## Filter based on the closest date match between fishing and survey, for each year
+leg_grid <- leg_grid %>% group_by(oid, fishyear) %>% slice(which.min(abs(datediff)))
+```
+
+```{r MapGRID, echo=FALSE}
+#| label: fig-BR-GRID
+#| fig-cap: "Grid cells within 50m of the Black Reef FIS site. The red dot indicates the center of the FIS site. Grid cells are colour coded by cpue. Note: only the directly overlapping grid cell is retained for analyses."
+#| fig-pos: "H"
+#| warning: false
+
+## Display the fishing events and FIS site in context
+## Pick the Black Reef Boulder transect site as an example
+
+leg_grid2 <- grid %>%
+  st_join(tas_legs, join=st_is_within_distance, dist = 100, 
+          left = TRUE)
+
+
+pick.poly2 <- which(leg_grid2$site == "BRB_LEG_1")
+pick.leg <- which(tas_legs$site == "BRB_LEG_1")
+
+myhex2 <- leg_grid2[pick.poly2,]
+#myhex2 <- leg_grid2[pick.poly2[[1]],]
+idx2 <- lengths(st_intersects(grid, myhex2)) > 0
+
+
+## plotting plotting grid cells adjacent to the Black Reef site with tmap::tm_shape
+tm_shape(grid[idx2,], unit = "meters") + tm_polygons(
+  #breaks = seq(20, 120, 20),
+  c("bl_gps_cpue"),
+  alpha = .7,
+  n = 7,
+  midpoint = NA,
+  palette = "-Spectral"
+) +
+  tm_shape(tas_legs[pick.leg,]) + 
+  tm_symbols(size = 10, col= "red") + 
+  tm_scale_bar(position=c("right", "top"))
+
+```
+
+## Results
+
+### FIS-Transect
+
+#### Relationship between FIS and KUD fishing events
+
+The relationship between CPUE and FIS abundance within a window of ± 90 days appears to be linear, and positive (@fig-kudfisleg-90), although relatively weak with an R^2^ of 0.2. This roughly positive relationship is encouraging in that the two indices of biomass are not contradictory. Shrinking the window of time difference to ± 30 days, has a negligible effect on the model fit, with R^2^ remaining at approximately 0.2 (@fig-kudfisleg-30 A). Log-transforming the data achieved a minor improvement in R^2^ of 0.26 (@fig-kudfisleg-30 B).
+
+```{r plot2}
+#| label: fig-kudfisleg-90
+#| fig-cap: "Relationship between FIS abalone density and CPUE, where fishing and survey events fall within a 90 day window."
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-pos: "H"
+
+## Plot density (ab/m2) against CPUE, colour coded by datediff
+## Note: should be the same as the output from the sp::over functin
+## plot filtered by fishing within 60 days either side of the survey date
+
+leg_polygons_window <- filter(leg_polygons, between(as.numeric(datediff), -90, 90))
+
+
+leg_polygons_window %>% 
+  ggplot( aes(x=absm2, y=blip_gps_cpue)) +
+  geom_point(aes(color=as.numeric(datediff))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.y = 100, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 95, aes(label = ..rr.label..))
+  
+  #geom_text(x = 2, y = 25, label = eq(leg_polygons_window$absm2,leg_polygons_window$blip_gps_cpue), parse = TRUE) 
+
+```
+
+```{r plot3, echo=FALSE}
+#| label: fig-kudfisleg-30
+#| fig-cap: "Relationship between FIS abalone density and CPUE, where fishing and survey events fall within a 30 day window."
+#| fig-width: 7
+#| fig-height: 7
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-pos: "H"
+
+
+## plot filtered by fishing within 30 days either side of the survey date
+leg_polygons_window <- filter(leg_polygons, between(as.numeric(datediff), -30, 30))
+
+legplot1 <- leg_polygons_window %>% 
+  ggplot( aes(x=absm2, y=blip_gps_cpue)) +
+  geom_point(aes(color=as.numeric(datediff))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.y = 100, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 95, aes(label = ..rr.label..))
+
+legplot2 <- leg_polygons_window %>%
+  within({
+    logabsm2 <- log(absm2)
+    logblip_gps_cpue <- log(blip_gps_cpue)
+  }) %>%
+  ggplot(aes(x = logabsm2, y = logblip_gps_cpue)) +
+  geom_point(aes(color = as.numeric(datediff))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.y = 4.7, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 4.5, aes(label = ..rr.label..))
+
+ggarrange(legplot1, legplot2,
+align='h', labels=c('A', 'B'),
+common.legend = T)
+
+```
+
+#### Relationship between FIS and GRID
+
+The relationship between annual catch per 1 hectare grid cell and FIS density, is marginally better, however R^2^ remains low at 0.36, suggesting FIS density is a poor predictor of annual catch (@fig-grid-fis).
+
+```{r LEGtimedifference, echo=FALSE}
+#| label: fig-grid-fis
+#| fig-cap: "Relationship between FIS abalone density and annual catch in the overlaying grid cell."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+## plot of density by Kilograms per hectare
+leg_grid %>% 
+  ggplot( aes(x=absm2, y=blcatch_kg)) +
+  geom_point(aes(color=as.factor(site))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.y = 800, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 750, aes(label = ..rr.label..))
+```
+
+```{r LEGtimedifferencelog, echo=FALSE}
+#| label: fig-grid-fislog
+#| fig-cap: "Effect of log transformation on the fit between FIS abalone density and annual catch in the overlaying grid cell."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+## plot of density by Kilograms per hectare
+leg_grid %>% within({
+  logabsm2 <- log(absm2)
+  logblcatch_kg <- log(blcatch_kg)
+}) %>% 
+  ggplot( aes(x=logabsm2, y=logblcatch_kg)) +
+  geom_point(aes(color=as.factor(site))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.y = 6.5, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 6, aes(label = ..rr.label..))
+```
+
+### Overlay grid on FIS-ARM sites
+
+The juvenile abundance data from research surveys provides an opportunity to explore the relationship between spawning biomass and juvenile abundance, where annual catch in a grid cell is a proxy for biomass. There appears to be no effective relationship between FIS-ARM density and our proxy for biomass (Kg/Ha harvested per grid cell), with R^2^ effectively zero (\@fig-grid-fisARM). At best we might conclude that there are no observations where juvenile abundance is high and annual catch is also high. Anything else is wishful thinking or a guess.
+
+```{r GridARMoverlay, echo=FALSE}
+
+arm_grid <- grid %>%
+  st_join(tas_arms,
+          join = st_intersects, 
+          left = TRUE) %>% filter(!is.na(site))
+
+
+## Calculate difference between FIS survey date and first fishing date
+arm_grid <- arm_grid %>% 
+  mutate(datediff = difftime(firstfishing, survdate, units = "days"))
+
+## Filter based on the closest date match between fishing and survey, for each year
+arm_grid <- arm_grid %>% group_by(oid, site, fishyear) %>% slice(which.min(abs(datediff)))
+```
+
+```{r plotjuvenile, echo=FALSE}
+#| label: fig-grid-fisARM
+#| fig-cap: "Relationship between FIS-ARM juvenile abalone density and annual catch in the overlaying grid cell."
+#| fig-pos: "H" 
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## plot of density by Kilograms per hectare
+arm_grid %>% 
+  ggplot( aes(x=absm2, y=blcatch_kg)) +
+  geom_point(aes(color=as.factor(site))) +
+  stat_smooth(method = lm, se = FALSE) +
+  stat_regline_equation(label.x = 5, label.y = 1150, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.x = 5, label.y = 1050, aes(label = ..rr.label..))
+```
+
+\newpage
+
+## Discussion
+
+This chapter examined simple relationships between catch rates (individual dive events) and annual catch (grid cell) using spatial methods and, two forms of research derived abalone density - visual surveys of emergent abalone, and visual surveys of cryptic juvenile abalone on recruitment modules. In all cases, the relationship between abundance of emergent abalone and density was linear and positive, rather than contradictory. However, this study found the fit to be generally poor, and offers very low confidence that a strong predictive relationship between FIS density and catch rates or annual catch/Hectare might be found. Restricting the time elapsed between completion of the FIS and overlapping fishing events to 30 days, gave almost no improvement to the model fit. Log transformation allowed some improvement in the fit, but not for the relationship between FIS and individual fishing events that overlapped with a study site.
+
+Within a grid cell or within an individual dive polygon, there is likely to be further spatial complexity in abundance of abalone. It may be that for grid based analyses, the 1Ha grid scale is too large, and in affect smoothing what is likely to be a rather heterogeneous field. Reducing the grid cell size to 0.5 or 0.25 hectares may be provide a much better relationship between geo-referenced fishery data and FIS data. Further, rather than an annual summation of GPS points within a grid cell, this could be reduced to shorter time-steps for example quarterly. Similarly, rather than using the 90% isopleth to represent dive polygons, a smaller isopleth such as the 50% or 25% isopleth may capture some of the underlying within dive polygon heterogeneity.
+
+
+

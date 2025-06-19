@@ -1,0 +1,341 @@
+# Grid turnover: temporal dynamics of reef use {#sec-chapter7} 
+
+```{r, echo=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  #library(sp)
+  library(gt)
+  library(gtExtras)
+  library(patchwork)
+  library(scales)
+})
+# par(family="HersheySerif")
+
+round_any <- function(x, accuracy, f=ceiling){f(x/ accuracy) * accuracy}
+
+
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+oid_data <- (readRDS(
+  file.path(datadir, "g1halong_2020_03_24.rds"))@data[, c("oid", "zone", "blockno", "fishyear", "mins")]) %>%
+  filter(fishyear != 2020 & mins > 5)
+```
+
+## Introduction
+When preparing and interpreting fishery data (catch, catch rates), there is no consideration given to whether fishers utilise all or part of the known productive reef each year. This is fundamentally because very few fisheries have sufficient spatial data across the fleet to determine what proportion of the fishing grounds have been accessed in a given year. Without knowledge of what proportion of the fishers have accessed in a given year, there becomes and implicit assumption that either a) it doesn't matter, or b) most of the reef is utilised and therefore it doesn't matter.
+
+Of specific interest were the following categories;
+
+-   *This Year* = total number number of cells fished this year
+-   *new* = new cells this year
+-   *Last year and this* = cells fished in two consecutive years (this year and the preceding year)
+-   *New this year* = cells fished this year, but not last year
+-   *Not this year, but last* = cells fished last year and not visited in the current year
+-   *Cumulative* = total known cells in the fishery
+
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.** Objective 3: **Identify methods for detecting hyper-stability in CPUE.**
+
+Objective 4: **Determine feasibility of spatial data based stock status determination in spatially structured fisheries **
+
+
+
+### Statewide patterns of grid cell turnover
+A state-wide summary of the grid dynamics indicate that in the eight year of this time-series, areas are being utilised that haven't been utilised in the previous seven years (@fig-annual-grid-turnover). This approach to examining the dynamics of reef utilisation indicate that the total number of cells utilised annually declined from 2016 to 2019, which is consistent with wide-ranging TACC reductions in those years. In the final year of this time-series however, there will still almost 1000 new cells visited across the fishery ([@tbl-celldynamicsfull], [@fig-annual-grid-turnover]). By the end of the time-series, there were over 47,500 1Ha Hexagonal cells visited between 2012 and 2019.
+
+```{r, echo=FALSE}
+#| label: tbl-celldynamicsfull
+#| tbl-cap: "Annual turnover of grid cells across the Tasmanian abalone fishery, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: This Year - total number number of cells fished this year; Last year and this - cells fished in two consecutive years (this year and preceding year); New this year - cells not previously fished; Not this year, but last - cells fished last year and not visited in the current year; Cumulative - total known cells in the fishery"
+#| echo: false
+#| warning: false
+#| message: false
+
+initial_oids <- with(oid_data, oid[fishyear == 2012]) %>% unique()
+
+get_changes <- local({
+  OID <- ALL <- initial_oids
+  function(oid) {
+    on.exit({
+      OID <<- oid
+      ALL <<- all_years
+    })
+    all_years <- union(oid, ALL)
+    list(
+      years = oid,
+      new  = setdiff(oid, ALL),
+      both_years = intersect(oid, OID),
+      this_year  = setdiff(oid, OID),
+      last_year  = setdiff(OID, oid),
+      all_years = all_years
+    )
+  }
+})
+
+
+changes <- with(oid_data, tapply(oid, fishyear, get_changes))
+change_nos <- sapply(changes, lengths)
+
+#knitr::kable(change_nos)
+
+change_nos[[2,1]] <- change_nos[[1,1]]
+change_nos[[3,1]] <- 0
+
+change_nos_df <- change_nos %>% as.data.frame() %>%
+  within({
+    change <- row.names(change_nos)
+      })
+
+full_table <- change_nos_df |>
+    gt(rowname_col = "change") |>
+    data_color(
+    rows = "new",
+    method = "quantile",
+   palette = "Spectral",
+   quantiles = 8,
+   domain = c(900, 22000 )
+  )
+
+
+
+full_table |> knitr::knit_print()
+
+#gtsave(full_table, "media/full_table.png")
+
+```
+
+```{r, echo=FALSE}
+#| label: fig-annual-grid-turnover
+#| fig-cap: "Dynamics of fishing. Annual turnover of grid cells across the Tasmanian abalone fishery, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: This Year - total number number of cells fished this year; Last year and this - cells fished in two consecutive years (this year and preceding year); New this year - cells not previously fished; Not this year, but last - cells fished last year and not visted in the current year; Cumulative - total known cells in the fishery"
+#| fig-width: 6
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+cols <- c("rosy brown", "green", "sky blue", "khaki", "pink", "red")
+barplot(change_nos, beside = TRUE, las = 1, cex.axis = 0.7, cex = 0.7,
+col = cols, border = cols, main = "Annual Grid Turnover")
+legend("topleft", c("This year", "new","Last year and this", "Not last year, but this", "Not this year, but last", "Cumulative, by year"),
+col = cols, pch = 20, pt.cex = 2, bty = "n", cex = 0.65)
+
+
+```
+
+
+```{r, echo = FALSE}
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 10
+ 
+select_blocks <- oid_data %>% filter((zone %in% c("N", "E") & blockno %in% c(6, 21)))
+#select_blocks <- oid_data %>% filter((zone %in% c("N", "W") & blockno %in% c(6, 12)))
+
+
+
+blocks <- sort(unique(select_blocks$blockno))
+change_nos_block <- structure(vector("list", length(blocks)), names = blocks)
+dummy <- change_nos*0
+
+
+for(block in sort(unique(select_blocks$blockno))) {
+  oid_block <- subset(select_blocks, blockno == block)
+
+  initial_oids <- with(oid_block, oid[fishyear == 2012]) %>% unique()
+
+  get_changes <- local({
+    OID <- ALL <- initial_oids
+    function(oid) {
+      on.exit({OID <<- oid; ALL <<- all_years})
+      all_years <- union(oid, ALL)
+      list(years = oid,
+           new  = setdiff(oid, ALL),
+           both_years = intersect(oid, OID),
+           this_year  = setdiff(oid, OID),
+           last_year  = setdiff(OID, oid),
+           all_years = all_years)
+    }
+  })
+
+  changes <- with(oid_block, tapply(oid, fishyear, get_changes))
+  result <- sapply(changes, lengths)
+  this_block <- dummy
+  this_block[, colnames(result)] <- result
+  this_block["all_years", ] <- cummax(this_block["all_years", ])
+  change_nos_block[[as.character(block)]] <- this_block
+  
+}
+
+
+block <- "6"
+for(block in names(change_nos_block)) {
+  #cat("\n\nBlock: ", block)
+  #print(knitr::kable(change_nos_block[[block]]))
+  
+  change_nos_df <- change_nos_block[[block]] %>% as.data.frame() %>%
+    within({
+      change <- row.names(change_nos_df)
+    })
+  change_nos_df[2, 1] <- change_nos_df[1, 1]
+  change_nos_df[3, 1] <- 0
+  change_nos_df <-  change_nos_df %>% relocate(change)
+
+  gt_tab <-  change_nos_df |>
+    gt(rowname_col = "change") |>
+    data_color(
+    rows = "new",
+    method = "quantile",
+   palette = "Spectral",
+   #quantiles = 8
+   domain = c(0, 1000 )
+  )
+
+  ft_tab <-  change_nos_df %>% flextable %>%
+    theme_booktabs()  
+  
+assign(paste0("gtchangetabl", block), gt_tab)  
+assign(paste0("ftchangetabl", block), ft_tab)  
+
+
+gg_plot <-  change_nos_df %>%
+    pivot_longer(cols = starts_with("20"),
+                 names_to = "fishyear",
+                 values_to = "cells") %>%
+    within({
+      change_f <-
+        factor(
+          change,
+          levels = c(
+            "years",
+            "new",
+            "both_years",
+            "this_year",
+            "last_year",
+            "all_years"
+          )
+        )
+    }) %>%
+    ggplot() +
+    geom_bar(
+      aes(
+        x = fishyear,
+        y = cells,
+        group = change_f,
+        fill = change_f
+      ),
+      stat = "identity",
+      width = .5,
+      position = "dodge"
+    )
+
+assign(paste0("gtchangeplt", block), gg_plot)  
+
+}
+
+bl6common <- t(as.data.frame(gtchangetabl6$`_data`[3,2:9])/as.data.frame(gtchangetabl6$`_data`[1,2:9]))
+colnames(bl6common) <- "common"
+bl21common <- t(as.data.frame(gtchangetabl21$`_data`[3,2:9])/as.data.frame(gtchangetabl21$`_data`[1,2:9]))
+
+colnames(bl21common) <- "common"
+
+bl6total <- t(as.data.frame(gtchangetabl6$`_data`[1,2:9])/as.vector(gtchangetabl6$`_data`[6,9]))
+colnames(bl6total) <- "total"
+bl21total <- t(as.data.frame(gtchangetabl21$`_data`[1,2:9])/as.vector(gtchangetabl21$`_data`[6,9]))
+colnames(bl21total) <- "total"
+
+
+
+
+```
+
+### Block level dynamics of grid cell activity
+At a smaller scale, the grid turnover metrics confirm that reef accessed to harvest abalone is not common among years, and, there may be as little as 50% overlap in reef utilised among consecutive years ([@tbl-celldynamics6], [@tbl-celldynamics21]). In the depleting fishery (Block 6), the mean fishing grounds in common among consecutive years was `r round(mean(bl6common[1:8], na.rm=T),2)` ([@tbl-celldynamics6]; Years vs both_years), except for 2019, where there was only `r round(bl6common[8], 2)` reef used in common. A similar pattern was observed for the rebuilding Block 21, with the mean fishing grounds in common among consecutive years marginally higher at `r round(mean(bl21common[1:8], na.rm=T),2)` ([@tbl-celldynamics6]; Years vs both_years).
+
+In overall terms, the proportion of the total known fishery utilised in anyone year averaged `r round(mean(bl6total[1:8], na.rm=T),2)` in Block 6, and `r round(mean(bl21total[1:8], na.rm=T),2)` in Block 21. In the final three years in Block 6 that fraction reduced to an average of `r round(mean(bl6total[6:8], na.rm=T),2)`, whereas in the rebuilding Block 21, that fraction was `r round(mean(bl21total[6:8], na.rm=T),2)`, and closer to the annual average.
+
+
+```{r}
+#| label: tbl-celldynamics6
+#| tbl-cap: "Dynamics of fishing in Block 6. Annual turnover of grid cells, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: years - total number number of cells fished this year; New this year - cells not previously fished; both_years - cells fished in two consecutive years (this year and preceding year); this_year - cells fished this year and not visited in the previous year; last_year - cells fished last year and not visited in the current year; all_years - total known cells in the fishery"
+#| fig-width: 7
+#| fig-height: 7
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Option to group gt tables
+# comb_tab <- gt_group(
+#   gtchangetabl6 |> data_color(
+#     rows = "new",
+#     method = "quantile",
+#     palette = "Spectral",
+#     quantiles = 8,
+#     domain = c(0, 1000)
+#   ) |>
+#     tab_header(title = "Block 6"),
+#   gtchangetabl21 |> data_color(
+#     rows = "new",
+#     method = "quantile",
+#     palette = "Spectral",
+#     quantiles = 8,
+#     domain = c(0, 500)
+#   ) |>
+#     tab_header(
+#     title = "Block 21")) 
+# 
+# comb_tab
+
+
+
+## Single tables
+## Option to group gt tables
+gt06 <-  gtchangetabl6 |> data_color(
+    rows = "new",
+    method = "quantile",
+    palette = "Spectral",
+    quantiles = 8,
+    domain = c(0, 1000)
+  ) 
+    # tab_header(title = "Dynamics of fishing in Block 6. Annual turnover of grid cells, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: years - total number number of cells fished this year; New this year - cells not previously fished; both_years - cells fished in two consecutive years (this year and preceding year); this_year - cells fished this year and not visited in the previous year; last_year - cells fished last year and not visited in the current year; all_years - total known cells in the fishery") |>
+gt06 |>  knitr::knit_print()
+ 
+#gt06 |> gtsave("grid21.docx")
+
+```
+
+```{r}
+#| label: tbl-celldynamics21
+#| tbl-cap: "Dynamics of fishing in Block 21. Annual turnover of grid cells, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: years - total number number of cells fished this year; New this year - cells not previously fished; both_years - cells fished in two consecutive years (this year and preceding year); this_year - cells fished this year and not visited in the previous year; last_year - cells fished last year and not visited in the current year; all_years - total known cells in the fishery"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+gt21 <- gtchangetabl21 |> data_color(
+    rows = "new",
+    method = "quantile",
+    palette = "Spectral",
+    quantiles = 8,
+    domain = c(0, 500)
+  ) 
+    # tab_header(title = "Dynamics of fishing in  Block 21. Annual turnover of grid cells, excluding cells with less than 5 minutes of fishing effort. Explanation of legend: years - total number number of cells fished this year; New this year - cells not previously fished; both_years - cells fished in two consecutive years (this year and preceding year); this_year - cells fished this year and not visited in the previous year; last_year - cells fished last year and not visited in the current year; all_years - total known cells in the fishery")  |>
+gt21 |>  knitr::knit_print()
+
+#save_as_docx( path = "C:/Users/cmundy/Dropbox (Personal)/AbSpatial/LDA_Test_tab.docx")
+
+#gt21 |> gtsave("grid21.docx")
+
+```
+
+
+## Discussion
+In the absence of spatially explicit fisheries data we are forced to ignore any underlying spatio-temporal dynamics within an SAU. The alternative is to make explicit assumptions about how we believe the fishery operates. In terms of reef utilised to achieve a harvest in a fishing year, and whether the amount of reef area changes through time, or, all fishing grounds are used every year is is a major gap in our understanding of our abalone fisheries. In this chapter we demonstrate that around two-thirds of reef utilised is common among consecutive years, with only half of the known fishing grounds utilised each year. Interestingly, we observed a decline in the average fraction of the total known reef area in the final three years of the eight year time-series. For the depleted Block 6, this is likely to reflect that fishers have targeted the few remaining productive fishing grounds in the fishery. Whereas for the rebuilding Block 21, with high catch rates and constraints on catch, the fishers will be able to obtain allocated catch from a smaller proportion of the total fishing grounds. Thus two different factors underpin a similar result - in Block the small level of reef used is a function of stock dynamics, whereas in Block 21 it is a management induced response. 
+
+Given the level of reef use in common among consecutive years is around two-thirds, we might conclude that fishers are not fishing at random each year, and experience in the previous year might encourage them to return if fishing was good, or find a new location if fishing was poor. This metric provides some insight into the fleet preference of where to fish each year, though does not account for changes in where individual divers may choose to fish across years. It is unlikely this new understanding of how fishers utilise reef areas will change existing data treatment of docket book, or even spatial data. It should however, influence how we think about recovery and depletion of fisheries, whether our management actions might be inducing trends in spatial utilisation of fishing grounds. As most of the Tasmanian abalone fishery has been either in a depleting phase or rebuilding phase over the period of this study, it is unclear whether the patterns we see are a subset or modified form of natural cycles of exploitation of fishing grounds (within and among years).
+
+A question frequently asked in abalone fisheries is whether our fisheries are undergoing spatial contraction. This question can only be answered with geo-referenced fishery-dependent data, although is not necessarily as simple as looking at which grid cells are not being utilised. Declining TACC also trigger a reduction in total effort, with corresponding reduction in spatial area utilised, unless abundance is declining rapidly and effort and area used increases inversely to catch. Fishers also rotate through their known patches, which may create  a signal in how the entire reef is used. This will be especially prevalent in SAUs which support small amounts of catch, and are visited by relatively few fishers often who have good local knowledge of that SAU. In this chapter we looked at cells that we fished last year, but not this year. This approach could be modified to examine those cells that have not been fished for a period of time after a particular year. For example, how many cells fished in 2012, were not fished again within the next five years, or indeed the entire remainder of the time series.
+
+The level of annual turnover in fishing grounds identified here suggests there will be limited success in utilising the grid based datasets for the purpose of predicting either future yield. Previous attempts to utilise the same dataset explored in this chapter (hexagonal grid dataset) to predict future catch as a function of recent catch history was very poor for the Tasmanian Western Zone [@mundy2018a, Chapter 8, Table 8]. That finding may well be a result of the lack of a high level of overlap among consecutive years here.

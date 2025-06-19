@@ -1,0 +1,6 @@
+# Objectives {#sec-objectives .unnumbered}
+
+1.  Characterise the statistical properties, consistency, interpretability and assumptions of spatial and classic indicators of fishery performance.
+2.  Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.
+3.  Identify methods for detecting hyper-stability in CPUE.
+4.  Determine feasibility of spatial data based stock status determination in spatially structured fisheries.

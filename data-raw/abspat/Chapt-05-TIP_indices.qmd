@@ -1,0 +1,936 @@
+# Time integrated productivity index (TIP) data {#sec-chapter5}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment = "",     ## nothing goes in front of each line
+                      message = FALSE,  ## into the console, not the document
+                      warning = FALSE,  ## into the console, not the document
+                      fig.align = "center",
+                      fig.show = "hold",
+                      out.height = "1.2\\textwidth",
+                      out.width = "0.8\\textwidth")
+options(knitr.kable.NA = '')
+
+datadir <- sprintf("C:/Users/%s/Dropbox/AbaloneData/", Sys.info()[["user"]])
+
+suppressPackageStartupMessages({
+library(tidyverse)
+library(patchwork)
+library(ggpubr)
+library(tictoc)
+library(sf)
+library(nngeo)
+library(sp)
+library(spdep)
+library(tmap)
+})
+
+## set EPSG CRS
+
+GDA2020 <- st_crs(7855)
+GDA94 <- st_crs(28355)
+WGS84 <- st_crs(4326)
+
+```
+
+```{r Data in, include = FALSE}
+#| echo: false
+#| warning: false
+#| message: false
+
+## GRID data retrieval
+grid_lc <- readRDS("./../../AbaloneData/hexslice_long_cumulative.rds")
+#hex.long.distinct <- readRDS("./../../AbaloneData/hexslice_long_distinct.rds")
+grid_wc <- readRDS("./../../AbaloneData/hexslice_wide_cumulative.rds")
+#hex.wide.distinct <- readRDS("./../../AbaloneData/hexslice_wide_distinct.rds")
+
+```
+
+## Introduction
+
+Fleet utilisation of fishing grounds in spatially structure fisheries is rarely described, and not well understood. In addition to choices made by fishers based on personal preference and restrictions imposed by weather conditions, patterns of exploitation may also be driven by fine-scale heterogeneity of stock productivity. Fishers often report a natural cycle of return times to specific fishing grounds, suggesting a strategy of exploiting a section of reef followed by a period of leaving that reef to recover. In a fishery with a large number of fishers, it is feasible that specific locations may be fished more frequently than individual fishers may be aware of. Most experienced fishers are also very adept at identifying sections of reef that are likely to support commercial quantities of catch. Thus the more attractive a section of reef, the greater the likely extent of visitation by fishers, and the greater the likelihood that section of reef will be fished each year. Whereas, some sections of reef may be unattractive, or thought to be unproductive because of past experience, or other location characteristics such as high frequency of white shark sightings. Abalone fishers identify and refer to sections of reef that are resilient to fishing as 'good recovery bottom' (GRB). As yet, we do not know specific locations of GRB, or whether they are permanent or temporary features of the fishing landscape depending on spatial and temporal patterns of exploitation. Habitat quality, food availability, recruitment dynamics along with local fishing pressure will all contribute to a high level of heterogeneity in local exploitation rates, and might be expected to impart a level of stability in relative productivity of local reef patches.
+
+Here we examine spatial structure in fishing activity, as one measure of the spatial complexity of the Tasmanian abalone fishery. One mechanism for characterising and quantifying the dynamics of reef use is to classify the known fishable reef in terms of whether it is fished frequently (every year), occasionally (most years) or rarely (e.g. one year in every 10). In addition to the inter-annual frequency of fishing a given location, it is also informative to understand whether that location is productive in a relative sense, i.e, compared to other sections of reef fished in that year, does it support a higher level of total catch across all fishers fishing at that location. The combined periodicity in fishing and relative yield can be used as an index of productivity over the extent of the time-series available. We reviewed a similar metric developed and applied in an early project [see Chapter 9, @mundy2018a], and made some minor changes in order to make the metric more informative.
+
+This chapter links to two objective:
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.** Objective 3: **Identify methods for detecting hyper-stability in CPUE.**
+
+Objective 4: **Determine feasibility of spatial data based stock status determination in spatially structured fisheries**
+
+## Methods
+
+### Time Integrated Productivity (TIP) Index
+
+In order to address some of the spatial heterogeneity questions raised above, we modified an earlier version of a Time Integrated Productivity Index, utilising the hexagon GRID data to better understand the importance of local reef areas to overall catch SAU. The TIP index may also be useful for identifying and characterising the resilience of patches of reef across the fishery, among other applications.
+
+In this exercise we have used catch/cell (cell = 1 Hectare hexagonal grid cell), with the cells in descending order of catch (grouped by zone and block), separately for each year. Four new fields are calculated in order to plot the concentration area curve (CAC):
+
+-   RowNum = rank order of cells based on catch (1:n())
+-   Tz = rank order normalised to 1
+-   CumCatch = Cumulative catch started from the hex cell with the greatest catch
+-   Pt = Cumulative catch normalised to one
+
+The TIP index is based on the quartiles of the Y axis (TIP) of the scaled concentration area curves produced from the above derived variables. A score from 4 to 1 is provided for each quartile, where the cells in the quartile of highest catch are assigned a score of 4, and the cells in the lowest quartile a score of 1 (@fig-TIP). Where a hex cell is not fished in a year, a Zero is assigned to the score for that year. The TIP index is created by summing the score across the available time-series - in this case eight years. The maximum value of the TIP index for an eight year time-series is therefore 32, and the minimum possible score is 1. A cell scores 32 only if it falls in the top 25% of cells in the Concentration Area Curve in all eight years.
+
+### Spatial Structure in TIP index
+
+The spatial structure of the TIP index was examined using Local Indicators of Spatial Autocorrelation (LISA) and Getis-Ord Hotspot analyses. LISA (Local Morans I) and G\* (Getis-Ord) statistics were calculated from D Nearest Neighbour matrices with D set as a range of 0m to 110m from the centroid of each target cell. The inter-centroid distance of the Hexagonal grid is 105m, thus a maximum distance of 110m ensures that only the immediate cells are considered neighbours. The K-nearest neighbour approach will classify cells some distance from the target along the edge of known reefs systems as part of that reef system, creating a neighbour network that may not always be identical to a D-nearest neighbour approach. LISA (Local Morans I assigns a class to all observations depending on the relationship between each target cell and its neighbours. If a target cell has a high TIP index and its neighbours also have a high TIP index, it is classified as High-High. When the inverse is true, cells are classified as Low-Low. Where the Target cell has a high TIP index score, and is surround by low TIP index score cells, it is classified as High-Low, etc. Significance of Morans I is tested by permutation (999 reps), and cells with non-significant outcomes are Classed as 'Non-Significant'. Getis-Ord Hotspot analysis provides a continuous Z score, and critical values of the statistic for 90th and 95th percentiles are given. Significant scores that are positive are considered hotspots, while negative scores indicate cold spots.
+
+```{r, echo=FALSE}
+#| warning: false
+#| message: false
+
+plotzone <- "N"
+plotblock <- 6
+
+
+hex_dat_full <- filter(grid_lc, zone == plotzone & blockno == plotblock & quarter == 4) %>%
+  st_set_geometry(NULL) %>%
+  group_by(blockno, fishyear, quarter) %>%
+  arrange(desc(catch)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz = RowNum / n(),
+    CumCatch = cumsum(catch),
+    Pt = CumCatch / sum(catch)
+  )
+
+
+
+
+## Scaled concentration area curve plot - TIP
+CAC_TIP <-
+  ggplot(hex_dat_full, aes(
+    x = Tz,
+    y = Pt,
+    colour = factor(fishyear),
+    group = fishyear
+  )) +
+  labs(y = "Proportion of cumulative catch", x = "Proportion of fished area") +
+  geom_point(shape = 16, size = 1)   +
+  theme_bw() +
+  scale_colour_viridis_d() +
+  scale_x_continuous(breaks = seq(0, 1, 0.2),
+                     minor_breaks = seq(0 , 1, 0.05)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2),
+                     minor_breaks = seq(0 , 1, 0.05)) +
+  guides(colour = guide_legend(title = "Year", override.aes = list(size =
+                                                                     6))) +
+  theme(
+    legend.position = "right",
+    axis.title.x = element_text(size = 14, vjust = -0.25),
+    axis.text.x  = element_text(size = 12, vjust = -0.5),
+    axis.title.y = element_text(size = 14, vjust = 0.5),
+    axis.text.y  = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+  annotate("text",
+           x = .8,
+           y = .1,
+           label = "Score = 4") +
+  annotate("text",
+           x = .8,
+           y = .35,
+           label = "Score = 3") +
+  annotate("text",
+           x = .8,
+           y = .6,
+           label = "Score = 2") +
+  annotate("text",
+           x = .8,
+           y = .85,
+           label = "Score = 1") +
+  geom_hline(
+    yintercept = c(0.25,0.5,0.75),
+    colour = "red",
+    linetype = "dashed",
+    size = 1
+  ) +
+  labs(title = "Time Integrated Productivity Y", subtitle = "CAC - scaled x and y") 
+
+
+```
+
+#### Grid filtering
+
+Most modern abalone fleets work 'live' while fishing. This means the skipper of the fishing boat will follow closely behind the diver, and will retrieve/deliver nets to/from the diver using a weighted drop line. The frequency of drop line throws will depend on catch rates, but is typically every five to ten minutes. Strong wind conditions, or days with higher swells can result in the fishing vessel drifting away from the diver for short periods. When processing spatial data from these days, it can result in minor and potentially spurious activity in grid cells adjacent to fished reef, often less than 5 minutes for a year, or for the entire time-series. Filtering of all grid cells where effort is greater than a minimum threshold is an important consideration. Removing grid cells with less than 5 minutes activity in any year results in a minor, but noticeable shift in the shape of the concentration area curves, and as a consequence, the TIP index ( @fig-TIP).
+
+```{r echo=FALSE}
+#| warning: false
+#| message: false
+
+## Calculate required columns for Concentration Curves
+
+filtyears <- 2
+filtmins <- 5
+
+hex_dat_filt <- grid_lc %>%
+  filter(minutes > filtmins  & quarter == 4) %>%
+  filter(zone == plotzone & blockno == plotblock) %>%
+  st_set_geometry(NULL) %>%
+  group_by(blockno, fishyear, quarter) %>%
+  arrange(desc(catch)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz = RowNum / n(),
+    CumCatch = cumsum(catch),
+    Pt = CumCatch / sum(catch)
+  )
+
+
+## Scaled concentration area curve plot - TIP
+CAC_TIP_filt <-
+  ggplot(hex_dat_filt, aes(
+    x = Tz,
+    y = Pt,
+    colour = factor(fishyear),
+    group = fishyear
+  )) +
+  labs(y = "Proportion of cumulative catch", x = "Proportion of fished area") +
+  geom_point(shape = 16, size = 1)   +
+  theme_bw() +
+  scale_colour_viridis_d() +
+  scale_x_continuous(breaks = seq(0, 1, 0.2),
+                     minor_breaks = seq(0 , 1, 0.05)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2),
+                     minor_breaks = seq(0 , 1, 0.05)) +
+  guides(colour = guide_legend(title = "Year", override.aes = list(size =
+                                                                     6))) +
+  theme(
+    legend.position = "right",
+    axis.title.x = element_text(size = 14, vjust = -0.25),
+    axis.text.x  = element_text(size = 12, vjust = -0.5),
+    axis.title.y = element_text(size = 14, vjust = 0.5),
+    axis.text.y  = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+  annotate("text",
+           x = .8,
+           y = .1,
+           label = "Score = 4") +
+  annotate("text",
+           x = .8,
+           y = .35,
+           label = "Score = 3") +
+  annotate("text",
+           x = .8,
+           y = .6,
+           label = "Score = 2") +
+  annotate("text",
+           x = .8,
+           y = .85,
+           label = "Score = 1") +
+  geom_hline(
+    yintercept = c(0.25,0.5,0.75),
+    colour = "red",
+    linetype = "dashed",
+    size = 1
+  ) +
+  labs(title = "Time Integrated Productivity Y", subtitle = "CAC - scaled x and y") 
+
+```
+
+```{r}
+#| label: fig-TIP
+#| fig-cap: "Time Integrated Productivity Y. Annual TIP score based on quartiles of cumalitve catch (vertical axis). *A*) full dataset wth no filtering, *B*) dataset filtered to remove cells with less than 5 minutes of effort (i.e. assumesthat cell was not fished in that year)."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 10
+#| echo: false
+
+
+tip_plots <- (CAC_TIP / CAC_TIP_filt)
+
+tip_plots + plot_annotation(tag_levels = 'A') 
+
+
+```
+
+```{r annualTIP, echo=FALSE}
+## Set minimum effort per hexagon
+filtmins <- 5
+
+## Select required columns
+TIP <- grid_wc %>% 
+  dplyr::select(oid, cellid, zone, blockno, dist_to_coast, 
+                mins2012Q4, mins2013Q4, mins2014Q4, mins2015Q4, mins2016Q4, mins2017Q4, mins2018Q4, mins2019Q4,
+                kg2012Q4, kg2013Q4, kg2014Q4, kg2015Q4, kg2016Q4, kg2017Q4, kg2018Q4, kg2019Q4, hexeffort, hexcatch
+  )  %>% 
+    filter(hexeffort > filtmins)
+
+## Calculate required columns for Concentration Curves
+## Clunky .. I'm sure someone smart can iterate through years
+TIP <- TIP %>% # 2012
+  group_by(zone, blockno) %>%
+  arrange(desc(kg2012Q4)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz12 = RowNum / n(),
+    CumCatch12 = cumsum(kg2012Q4),
+    Pt12 = CumCatch12 / sum(kg2012Q4, na.rm = T),
+    TIP.12 = 0,
+    TIP.12 = case_when(
+      Pt12 <= 0.25 ~ 4,
+      Pt12 <= 0.5 ~ 3,
+      Pt12 <= 0.75  ~ 2,
+      Pt12 <= 1.0 ~ 1,
+      is.na(Pt12) ~ 0
+    ))
+
+TIP <- TIP %>% # 2013
+  group_by(zone, blockno) %>%
+  arrange(desc(kg2013Q4)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz13 = RowNum / n(),
+    CumCatch13 = cumsum(kg2013Q4),
+    Pt13 = CumCatch13 / sum(kg2013Q4, na.rm = T),
+    TIP.13 = 0,
+    TIP.13 = case_when(
+      Pt13 <= 0.25 ~ 4,
+      Pt13 <= 0.5 ~ 3,
+      Pt13 <= 0.75  ~ 2,
+      Pt13 <= 1.0 ~ 1,
+      is.na(Pt13) ~ 0
+    )
+  )
+  
+TIP <- TIP %>% # 2014
+  group_by(zone, blockno) %>%
+  arrange(desc(kg2014Q4)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz14 = RowNum / n(),
+    CumCatch14 = cumsum(kg2014Q4),
+    Pt14 = CumCatch14 / sum(kg2014Q4, na.rm = T),
+    TIP.14 = 0,
+    TIP.14 = case_when(
+      Pt14 <= 0.25 ~ 4,
+      Pt14 <= 0.5 ~ 3,
+      Pt14 <= 0.75  ~ 2,
+      Pt14 <= 1.0 ~ 1,
+      is.na(Pt14) ~ 0
+    )
+  )
+  
+TIP <-  TIP %>% # 2015
+  group_by(zone, blockno) %>%
+  arrange(desc(kg2015Q4)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz15 = RowNum / n(),
+    CumCatch15 = cumsum(kg2015Q4),
+    Pt15 = CumCatch15 / sum(kg2015Q4, na.rm = T),
+    TIP.15 = 0,
+    TIP.15 = case_when(
+      Pt15 <= 0.25 ~ 4,
+      Pt15 <= 0.5 ~ 3,
+      Pt15 <= 0.75  ~ 2,
+      Pt15 <= 1.0 ~ 1,
+      is.na(Pt15) ~ 0
+    )
+  )
+  
+ TIP <-  TIP %>% # 2016
+   group_by(zone, blockno) %>%
+   arrange(desc(kg2016Q4)) %>%
+   mutate(
+     RowNum = 1:n(),
+     Tz16 = RowNum / n(),
+     CumCatch16 = cumsum(kg2016Q4),
+     Pt16 = CumCatch16 / sum(kg2016Q4, na.rm = T),
+     TIP.16 = 0,
+     TIP.16 = case_when(
+       Pt16 <= 0.25 ~ 4,
+       Pt16 <= 0.5 ~ 3,
+       Pt16 <= 0.75  ~ 2,
+       Pt16 <= 1.0 ~ 1,
+       is.na(Pt16) ~ 0
+     )
+   )
+  
+ TIP <-  TIP %>% # 2017
+   group_by(zone, blockno) %>%
+   arrange(desc(kg2017Q4)) %>%
+   mutate(
+     RowNum = 1:n(),
+     Tz17 = RowNum / n(),
+     CumCatch17 = cumsum(kg2017Q4),
+     Pt17 = CumCatch17 / sum(kg2017Q4, na.rm = T),
+     TIP.17 = 0,
+     TIP.17 = case_when(
+       Pt17 <= 0.25 ~ 4,
+       Pt17 <= 0.5 ~ 3,
+       Pt17 <= 0.75  ~ 2,
+       Pt17 <= 1.0 ~ 1,
+       is.na(Pt17) ~ 0
+     )
+   )
+  
+ TIP <-   TIP %>% # 2018
+   group_by(zone, blockno) %>%
+   arrange(desc(kg2018Q4)) %>%
+   mutate(
+     RowNum = 1:n(),
+     Tz18 = RowNum / n(),
+     CumCatch18 = cumsum(kg2018Q4),
+     Pt18 = CumCatch18 / sum(kg2018Q4, na.rm = T),
+     TIP.18 = 0,
+     TIP.18 = case_when(
+       Pt18 <= 0.25 ~ 4,
+       Pt18 <= 0.5 ~ 3,
+       Pt18 <= 0.75  ~ 2,
+       Pt18 <= 1.0 ~ 1,
+       is.na(Pt18) ~ 0
+     )
+   )
+  
+TIP <-  TIP %>% # 2019
+  group_by(zone, blockno) %>%
+  arrange(desc(kg2019Q4)) %>%
+  mutate(
+    RowNum = 1:n(),
+    Tz19 = RowNum / n(),
+    CumCatch19 = cumsum(kg2019Q4),
+    Pt19 = CumCatch19 / sum(kg2019Q4, na.rm = T),
+    TIP.19 = 0,
+    TIP.19 = case_when(
+      Pt19 <= 0.25 ~ 4,
+      Pt19 <= 0.5 ~ 3,
+      Pt19 <= 0.75  ~ 2,
+      Pt19 <= 1.0 ~ 1,
+      is.na(Pt19) ~ 0
+    )
+  )
+ 
+#TIP.backup <- TIP  
+#TIP <- TIP.backup
+#
+```
+
+```{r FinalTIP, echo=FALSE}
+## Calculate TIP Index by summing quantile score (0, 1, 2, 3, 4) across
+##  8 year time series to give a score between 1 and 32
+ TIP <- TIP %>%
+   ungroup %>%
+   mutate(TIP.8yr = rowSums(.[, grep("TIP.", names(.), value = T), drop = TRUE], na.rm = TRUE),
+          count_yr = rowSums(!is.na(.[, grep("kg20", names(.), value = T), drop = TRUE])),
+          totalcatch = rowSums(.[, grep("kg20", names(.), value = T), drop = TRUE], na.rm = TRUE))
+ 
+ #saveRDS(TIP, paste0(datadir,"/TIP.RDS")) 
+```
+
+## Results
+
+Here we use Block `r plotblock`, `r plotzone` to examine the properties of the TIP index. The frequency distribution of the TIP index is left skewed with relatively few grid cells achieving a TIP index of greater than 15 (@fig-TIPsummary A). There is a positive non-linear relationship between TIP index and total catch (pooled across the 8 year time series) (@fig-TIPsummary B). The majority of catch however is harvested from grid cells with a TIP index between 6 and 22, with cells with a very high TIP index delivering relatively little overall catch (@fig-TIPsummary C). In contrast, cells that are fished in at least six of the eight years account for the majority of the catch (@fig-TIPsummary D), and cells that are rarely visited (within our time series), support only relative small amounts of catch.
+
+Examining the relationship between TIP and years fished indices is instructive for overall patterns, but masks any variation among individual grid cells within each index class. High TIP index cells, and/or cells that are fished in most years (six or more) have the highest median annual catch, but span a comparatively large range of annual catch values (@fig-TIP-annualcatch). Cells with a high TIP index are necessarily fished in most years, and have high catches relative to other cells in that year. Cells that are fished in most or all years, however show substantial variation, and do not always have high annual catches. While very high TIP index cells typically achieve higher total annual catch, they are relatively uncommon, and thus contribute less to the total catch of an SAU than might be assumed.
+
+```{r FinalTIPPlots, echo=FALSE}
+#| label: fig-TIPsummary
+#| fig-cap: "Summary information on TIP indices relative to frequency of occurence and catch. A) Frequency of TIP index; B) Relationship between TIP index and total catch (years pooled); C) Total catch by TIP Index (years pooled); D) Total catch by index of years fished (years pooled). Note: years fished is a count of the yrs when a given cell recorded more than the 5 minute effort threshold."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 7
+
+plotzone <- "N"
+plotblock <- 6
+
+
+ ## Plot of total catch by TIP
+TIPbyCatch <- TIP %>%
+  filter(zone == plotzone & blockno == plotblock) %>%
+  ggplot() + geom_point(aes(x = TIP.8yr, y = totalcatch, alpha = 0.5))# +
+  #labs(title = "Total catch/cell (X) versus TIP Index (Y)", subtitle = "Western Zone, Block 11")
+
+
+yrcatchHisto <- TIP %>%
+  st_set_geometry(NULL) %>%
+  ungroup() %>%
+  filter(zone == plotzone & blockno == plotblock) %>%
+  ggplot(aes(x = count_yr, y = totalcatch)) + geom_bar(stat = "sum")   
+
+TIPhisto  <- TIP %>%
+  filter(zone == plotzone & blockno == plotblock) %>%
+  ggplot() + geom_histogram(aes(x = TIP.8yr))  #+
+ # labs(title = "Frequency distribution of 8 Yr TIP Index", subtitle = "Western Zone, Block 11")
+
+
+TIPcatchHisto <- TIP %>%
+  st_set_geometry(NULL) %>%
+  ungroup() %>%
+  filter(zone == plotzone & blockno == plotblock) %>%
+  ggplot(aes(x = TIP.8yr, y = totalcatch)) + geom_bar(stat = "sum") #+
+  #labs(title = "Bar plot of total catch for each TIP score", subtitle = "Western Zone, Block 11")
+
+#patchplots <- ((TIPhisto + TIPcatchHisto)/ (TIPbyCatch + plot_spacer() ))
+
+patchplots <- ((TIPhisto + TIPbyCatch)/ (TIPcatchHisto + yrcatchHisto ))
+
+ 
+patchplots + plot_annotation(tag_levels = 'A') 
+  
+
+# TIP %>%  filter(zone == plotzone & blockno == plotblock) %>%
+#   st_set_geometry(NULL) %>%
+#   group_by(TIP.8yr) %>%
+#   summarise(catch = sum(totalcatch),
+#             n = n()) %>% print(n = 32)
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+## Map TIP Index(s) back to working grid objects
+
+TIP.temp  <- TIP %>% dplyr::select(oid, TIP.8yr, count_yr) %>% 
+  st_set_geometry(NULL)
+
+
+grid_wc <- left_join(grid_wc, TIP.temp, by = "oid")
+
+grid_lc <- left_join(grid_lc, TIP.temp, by = "oid")
+
+
+```
+
+```{r}
+#| label: fig-TIP-annualcatch
+#| fig-cap: "A) Boxplot of annual catch by TIP Index. B) Boxplot of annual catch by years fished.  Note: crude catch rate calculated from  the ratio of catch/effort within each grid cell."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Choose Zone and Block
+plotzone <- "N"
+plotblock <- 6
+
+TIPcols <- hcl.colors(8, "Roma", rev = TRUE, alpha = 1)
+yrcols <- hcl.colors(8, "viridis", rev = TRUE, alpha = 1)
+
+## Plot of total catch by TIP 
+
+
+TIPCatch <- grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone & blockno == plotblock & quarter == 4) %>%
+  filter(!is.na(TIP.8yr)) %>%
+  ggplot() + 
+  aes(x = TIP.8yr, y = catch, group= TIP.8yr,fill = TIP.8yr) +
+  geom_boxplot(size = 0.25, outlier.alpha = 5/10, outlier.size = 0.75, outlier.colour = "orange", show.legend = FALSE) +
+ # theme(legend.position = "bottom") +
+  labs(y = "Catch (Kg)") + 
+  scale_y_continuous(limits=c(0,800), breaks=seq(0,800,200), expand = c(0, 0)) #+ guides(colour=FALSE)
+#  ylim(0, 2000) 
+#   scale_fill_brewer(palette = "Set3") +
+#   theme(legend.position = "bottom") #+ facet_wrap(~ zone)
+
+
+yrCatch <- grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone & blockno == plotblock & quarter == 4) %>%
+  filter(!is.na(count_yr)) %>%
+  ggplot() + 
+  aes(x = count_yr, y = catch, group= count_yr, fill = count_yr) +
+  geom_boxplot(size = 0.25, outlier.alpha = 5/10, outlier.size = 0.75, outlier.colour = "orange", show.legend = FALSE) +
+ # theme(legend.position = "bottom") +
+  labs(y = "Catch (Kg)")  +
+  scale_y_continuous(limits=c(0,400), breaks=seq(0,400,100), expand = c(0, 0)) 
+#  ylim(0, 2000)
+
+Tipplots <- TIPCatch  +  yrCatch
+
+
+Tipplots + plot_annotation(tag_levels = 'A') 
+
+
+```
+
+#### Differences in annual catch among TIP and year fished indices
+
+When the relationship between catch and TIP index is considered by year, we see a similar pattern to that observed for the dataset with years pooled, though there is evidence of a shift in the relationship over time. The abalone fishery in the example SAU used here declined over the time period of 2012-19, and we see a gradual lowering of the annual catch achieved by high TIP cells ([@fig-TIPcatch_facet]). In 2012 and 2013, high TIP cells were achieving a median annual catch over 200kg, whereas by 2018 and 2019, high TIP cells were typically achieving a total annual catch of less than 200kg ([@fig-TIPcatch_facet]). The shift in median annual catch through time was less marked when we simply examine cells by the number of years they had been fished ([@fig-YRcatch-facet]).
+
+```{r}
+#| label: fig-TIPcatch_facet
+#| fig-cap: "Annual catch by TIP index in Block 6, Northern Zone, for each year in the time series (2012-19)."
+#| fig-pos: "H"
+#| fig-height: 10
+#| fig-width: 8
+#| out-height: 90%
+#| echo: false
+#| warning: false
+#| message: false
+
+
+TIPCatch_facet <- grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone & blockno == plotblock & quarter == 4) %>%
+  filter(!is.na(TIP.8yr)) %>%
+  ggplot() + 
+  aes(x = TIP.8yr, y = catch, group= TIP.8yr,fill = TIP.8yr) +
+  geom_boxplot(size = 0.25, outlier.alpha = 5/10, outlier.size = 0.75, outlier.colour = "orange", show.legend = FALSE) +
+ # theme(legend.position = "bottom") +
+  labs(y = "Catch (Kg)") + 
+  scale_y_continuous(limits=c(0,800), breaks=seq(0,800,200), expand = c(0, 0)) + 
+  facet_wrap(~ fishyear, ncol=2)
+TIPCatch_facet
+
+```
+
+```{r}
+#| label: fig-YRcatch-facet
+#| fig-cap: "Annual catch by year index in Block 6, Northern Zone, for each year in the time series (2012-19)."
+#| fig-pos: "H"
+#| fig-height: 10
+#| fig-width: 8
+#| out-height: 90%
+#| echo: false
+#| warning: false
+#| message: false
+
+
+yrCatch_facet <- grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone & blockno == plotblock & quarter == 4) %>%
+  filter(!is.na(count_yr)) %>%
+  ggplot() + 
+  aes(x = count_yr, y = catch, group= count_yr, fill = count_yr) +
+  geom_boxplot(size = 0.25, outlier.alpha = 5/10, outlier.size = 0.75, outlier.colour = "orange", show.legend = FALSE) +
+ # theme(legend.position = "bottom") +
+  labs(y = "Catch (Kg)")  +
+  scale_y_continuous(limits=c(0,400), breaks=seq(0,400,100), expand = c(0, 0)) +
+  facet_wrap(~ fishyear, ncol=2)
+#  ylim(0, 2000) 
+yrCatch_facet
+
+```
+
+#### Catch rate as a function of TIP and year fished indices
+
+To simplify graphical presentations, the 32 level TIP index was categorised into 8 ordered classes, with TIP Class 1 containing TIP index scores of 1-4, Class 2 with 5-8, etc. A crude catch rate (CPUE) was calculated for each class by the ratio of annual catch and effort observed for each cell. There was no consistent ordering of CPUE and TIP Class in the example SAU (@fig-TIP-CPUE A), and all TIP classes displayed a common inter-annual trend. The relationship between years fished index and CPUE was less consistent. In the first year (2012), cells fished in only 1 year had markedly higher CPUE, while cells that were fished every year had the second lowest CPUE (@fig-TIP-CPUE B). At the end of the time series cells that had been fished in most years (7 or 8) had low to moderate CPUE, and the cells that had been fished between three and four years had markedly higher CPUE (@fig-TIP-CPUE B), and the cells that had only been fished in 2019 had the highest CPUE.
+
+```{r}
+#| label: fig-TIP-CPUE
+#| fig-cap: "A) Crude mean cell CPUE by TIP index categorised into a bin size of 4 (i.e. TIP class of 8 includes cells with TIP score of 29-32 inclusive); B) Crude mean cell CPUE by number of years fished. Note: crude catch rate calculated from the ratio of catch/effort within each grid cell."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 10
+#| echo: false
+#| warning: false
+#| message: false
+
+
+crudeCPUE_tip <-  grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone &
+           blockno == plotblock & quarter == 4 ) %>%
+  filter(!is.na(TIP.8yr)) %>%
+  within({
+    catcheffort <- catch / (minutes / 60)
+    tile <- as.factor(ntile(TIP.8yr, 8))
+  }) %>% group_by(fishyear, tile) %>%
+  summarise(crudeCPUE = mean(catcheffort, na.rm = T)) %>%
+  ggplot() + geom_line(aes(x = fishyear, y = crudeCPUE, group=tile, colour = tile), linewidth = 1) + 
+  scale_color_manual(values = TIPcols) + theme_bw() + guides(color=guide_legend(title="TIP \n Class"))
+
+
+
+crudeCPUE_yr <-  grid_lc %>%
+  st_set_geometry(NULL) %>%
+  filter(zone == plotzone &
+           blockno == plotblock & quarter == 4) %>%
+  filter(!is.na(count_yr)) %>%
+  within({
+    catcheffort <- catch / (minutes / 60)
+    count_yr_f  <- as.factor(count_yr)
+  }) %>% group_by(fishyear, count_yr_f) %>%
+  summarise(crudeCPUE = mean(catcheffort, na.rm = T)) %>%
+  ggplot() + geom_line(aes(
+    x = fishyear,
+    y = crudeCPUE,
+    group = count_yr_f,
+    colour = count_yr_f
+  ),
+  linewidth = 1) +
+  scale_color_manual(values = yrcols) + 
+  theme_bw() + guides(color = guide_legend(title = "Yrs \n fished"))
+
+  
+Tipcpueplots <- (crudeCPUE_tip / crudeCPUE_yr)
+
+Tipcpueplots + plot_annotation(tag_levels = 'A') 
+
+```
+
+### Spatial structure of TIP indices
+
+The summaries above demonstrated that high TIP index cells were relatively uncommon, but supported relatively high annual catch, at a similar CPUE to moderate or low TIP cells. The spatial distribution of these high and low TIP index cells is also of interest. For example do they occur as individual cells within the fishing grounds, or as small or large clusters of cells that might identify reefs with underlying characteristics. Local Indices of Spatial Autocorrelation (LISA) and Getis-Ord HotSpot analyses provide a mechanism for examining spatial structure in the TIP index.
+
+The spatial lag of the TIP score is positively correlated with the TIP score ([@fig-TIP-MoransI-lag]), confirming that there is spatial autocorrelation in the dataset. A map of Local Morans I colour coded by LISA class (High-High, Low-Low, etc,). The majority of cells are classified as Not-significant (i.e. no local autocorrelation). However cells classed as High-High are distributed through the fishing ground, either as individual cells are as small to large clusters of High-High cells ([@fig-TIP-MoransI-map]). There were relatively few Low-Low cells in the example SAU. Most Low-Low cells were scattered across the fishing ground with only one cluster of any size evident ([@fig-TIP-MoransI-map]). The Getis-Ord HotSpot analyses found a very similar pattern, particularly with the HotSpot cells, but provided a little more detail on ColdSpot cells than the LISA approach ([@fig-TIP-GetisOrd-map]).
+
+```{r spatial_structure, echo=FALSE}
+## Chose a working subset
+## 
+plotzone <- "N"
+plotblock <- 6
+#plotsubblock <- "12C"
+
+
+spdat <-
+  filter(grid_wc,
+         str_trim(zone) == plotzone &
+           str_trim(blockno) %in% plotblock)  %>%
+           #str_trim(subblockno) %in% plotsubblock)  %>%
+  filter(!is.na(TIP.8yr))
+
+spdat.cent <- spdat %>% 
+  st_centroid() 
+
+coords <- st_coordinates(spdat.cent) %>% 
+  as.data.frame()
+
+## Bind lat longs back to centroids
+spdat.cent <- cbind(spdat.cent,coords) %>% 
+  rename(easting = X, northing = Y)
+
+```
+
+```{r NNB, echo=FALSE}
+#Create a nearest neighbour object (class nb) using dnearneigh 
+#need to decide on distance to search for neighbours, or the number of neighbours.
+
+## D NNB
+dnb_all <- dnearneigh(spdat.cent, 0, 110)
+dnb_allw <- nb2listw(dnb_all, style="B", zero.policy=TRUE)
+
+
+## Weight D nearest neighbours by distance
+dnb_alldist <- nbdists(dnb_all, st_coordinates(spdat.cent), longlat = NULL)
+dnb_alldist <- lapply(dnb_alldist, function(x) 1/x)
+dnb_allw.2 <- nb2listw(dnb_all, glist=dnb_alldist, style="B", zero.policy=TRUE)
+
+dsts <- unlist(dnb_alldist)
+
+#summary(dsts)
+#min(dsts)
+
+## K NNB
+knn <-knearneigh(spdat.cent, k=6, longlat = NULL)#, RANN=TRUE)
+knb <- knn2nb(knn)
+knbw <- nb2listw(knb, style="B", zero.policy=TRUE)
+
+## Weight K neighbours by distance
+knbdist <- nbdists(knb, st_coordinates(spdat.cent), longlat = NULL)
+knbdist <- lapply(knbdist, function(x) 1/x)
+knbw.2 <- nb2listw(knb, glist=knbdist, style="B", zero.policy=TRUE)
+
+```
+
+```{r GlobalMoranI}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Step 1 Global Moran I test ####
+# Moran's I on the DV
+
+mt_result <- moran.test(spdat.cent$TIP.8yr, listw = dnb_allw.2, zero.policy=TRUE)
+
+# ## Step 2 Moran plot ####
+# ## - labels are kg/hex cell
+# mp <-
+#   moran.plot(
+#     spdat.cent$TIP.8yr,
+#     dnb_allw.2,
+#     labels = round(spdat.cent$TIP.8yr),
+#     xlab = "Blacklip Catch",
+#     ylab = "Lag of Blacklip Catch",
+#     zero.policy = TRUE
+#   )
+# 
+# local <- localmoran(x = spdat.cent$TIP.8yr, listw = dnb_allw.2, zero.policy=TRUE)
+# 
+# local_i <- local %>% 
+#   as.tibble() %>% 
+#   set_names(c("local_i", "exp_i", "var_i", "z_i", "p_i",
+#               "p_i_sim", "pi_sim_folded", "skewness", "kurtosis"))
+# 
+# # binds results to our hex layer
+# moran.map <- cbind(spdat, local)
+# moran.map.cent <- cbind(spdat.cent, local)
+# 
+# tm_shape(moran.map) +
+#   tm_fill(col = "Ii",
+#           style = "quantile",
+#           title = "local moran statistic") 
+
+
+## Function to rename sf geometry column
+# rename_geometry <- function(g, name){
+#     current = attr(g, "sf_column")
+#     names(g)[names(g)==current] = name
+#     st_geometry(g)=name
+#     g
+# }
+# 
+# 
+# nc <- rename_geometry(spdat, "geometry")
+# plot(nc) # should work
+# names(nc) # shows "gyom
+
+
+```
+
+```{r MoransI}
+#| label: fig-TIP-MoransI-lag
+#| fig-cap: "Morans I: Spatial lag of TIP against Z score. Cells colour coded by the Local Indicator of Spatial Auotcorelation (LISA) index. The High-High class indicates the target cell has a high TIP index, and all neighbour cells also have a high TIP index (i.e. a 'hotspot'). Low-Low indicates the inverse with both Target cells and neighbour cells having low TIP indicies (i.e. a 'coldspot')."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+
+locali <- localmoran_perm(spdat.cent$TIP.8yr,
+                          dnb_allw.2,
+                          zero.policy = TRUE,
+                          nsim = 999) %>%
+  as_tibble() %>%
+  set_names(
+    c(
+      "local_i",
+      "exp_i",
+      "var_i",
+      "z_i",
+      "p_i",
+      "p_i_sim",
+      "pi_sim_folded",
+      "skewness",
+      "kurtosis"
+    )
+  )
+
+moran.map <-  spdat %>%
+              bind_cols(locali) 
+
+moran.map.cent <-  spdat.cent %>%
+              bind_cols(locali)
+
+
+# significance threshold
+signif <- 0.05 
+
+moran.map <- moran.map %>%
+  mutate(TIP.8yrz =  as.numeric(scale(TIP.8yr)),
+    TIP.8yrzlag = lag.listw(dnb_allw.2, TIP.8yrz),
+    lisa_cluster = case_when(
+    p_i >= signif ~ "Not significant",
+    TIP.8yrz > 0 & local_i > 0 ~ "High-high",
+    TIP.8yrz > 0 & local_i < 0 ~ "High-low",
+    TIP.8yrz < 0 & local_i > 0 ~ "Low-low",
+    TIP.8yrz < 0 & local_i < 0 ~ "Low-high"
+  ))
+
+
+color_values <- c(`High-high` = "red", 
+                  `High-low` = "pink", 
+                  `Low-low` = "blue", 
+                  `Low-high` = "lightblue", 
+                  `Not significant` = "white")
+
+ggplot(moran.map, aes(x = TIP.8yrz, 
+                              y = TIP.8yrzlag,
+                              fill = lisa_cluster)) + 
+  geom_point(color = "black", shape = 21, size = 2) + 
+  theme_minimal() + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  scale_fill_manual(values = color_values) + 
+  labs(x = "TIPS (z-score)",
+       y = "Spatial lag of TIPS (z-score)",
+       fill = "Cluster type")
+
+tmap_mode("plot")
+```
+
+```{r LISAclusters}
+#| label: fig-TIP-MoransI-map
+#| fig-cap: "Spatial structue of Local Indicator of Spatial Auotcorelation (LISA) index. The High-High class indicates the target cell has a high TIP index, and all neighbour cells also have a high TIP index (i.e. a 'hotspot'). Low-Low indicates the inverse with both Target cells and neighbour cells having low TIP indicies (i.e. a 'coldspot')."
+#| fig-pos: "H"
+#| fig-width: 10
+#| fig-height: 13
+#| echo: false
+#| warning: false
+#| message: false
+
+
+tm_shape(moran.map, unit = "km") +
+  tm_polygons(col = "lisa_cluster", title = "Local Moran's I", palette = color_values) +
+  tm_compass(type = "arrow", position = c("right", "top")) + 
+    tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c(0, 0.1)) +
+  tm_layout(frame = F, legend.outside = T) 
+
+
+```
+
+```{r localGclusters}
+#| label: fig-TIP-GetisOrd-map
+#| fig-cap: "Getis-Ord G statistic for HotSpot analysis. When both Target and neighbour cells have high TIP indices, cells ae classified in three bands of 'HotSpot'. When Target and Neighbour cells have low TIP indices, they are classified in three bands indicating a 'ColdSpot'."
+#| fig-pos: "H"
+#| fig-width: 10
+#| fig-height: 13
+#| echo: false
+#| warning: false
+#| message: false
+
+local_g <- localG(spdat.cent$TIP.8yr, dnb_allw.2)
+local_g <- cbind(spdat, as.matrix(local_g))
+local_g <- local_g %>%
+  rename(gstat = as.matrix.local_g.)  %>%
+  mutate(localg = as.numeric(gstat))
+
+local_g <- local_g %>%
+                mutate(hotspotsg = case_when(
+                  localg <= -2.58 ~ "Cold spot 99%",
+                  localg > -2.58 & localg <=-1.96 ~ "Cold spot 95%",
+                  localg > -1.96 & localg <= -1.65 ~ "Cold spot 90%",
+                  localg >= 1.65 & localg < 1.96 ~ "Hot spot 90%",
+                  localg >= 1.96 & localg <= 2.58 ~ "Hot spot 95%",
+                  localg >= 2.58 ~ "Hot spot 99%",
+                  TRUE ~ "Not Significant"))
+
+#coerce into a factor, and sort levels from cold to not significant to hot
+local_g <- local_g %>%
+              mutate(hotspotsg = factor(hotspotsg,
+                                  levels = c("Cold spot 99%", "Cold spot 95%",
+                                             "Cold spot 90%", "Not Significant",
+                                            "Hot spot 90%", "Hot spot 95%",
+                                            "Hot spot 99%")))
+
+tm_shape(local_g, unit = "km") +
+  tm_polygons(col = "hotspotsg", title = "Gi value", palette = c("blue","white", "red")) +
+  tm_compass(type = "arrow", position = c("right", "top")) + 
+    tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c(0, 0.1)) +
+  tm_layout(frame = F, legend.outside = T) 
+
+```
+
+## Discussion
+
+The Time Integrated Productivity Index provides valuable insights on the spatial structure of productivity of fishing grounds. Total catch per cell was positively related to both the TIP index and years fished, although the overall contribution of these high TIP cells (or cells fished every year) to the SAU catch was relatively minor as these cells are relatively uncommon. Despite high TIP index cells supporting higher annual catch, there was no substantial difference in catch rates (crude CPUE) across TIP classes, or years fished.
+
+High TIP index cells (hotspots) were not found to be clustered or grouped as a large block within the SAU fishing grounds used as an example in this study. Similarly low TIP index cells (coldspots) were distributed throughout the fishing ground, although the Getis-Ord HotSpot analysis identified an area of low-productivity in the central area of the case-study SAU ([@fig-TIP-GetisOrd-map]). There was some evidence of a diminishing total annual catch from high TIP cells over time, but this likely to be a broader pattern of depletion across the SAU, as annual catch was simultaneously declining in low TIP index cells [@fig-TIPcatch_facet].
+
+The observation that individual areas of reef (identified here by one Hectare grid cells) show a temporal dynamic highlights an important consideration for how we use grid cell data in a fishery assessment. Critical, is that we do not assume that the spatial structure observed in any given year is static. While we did find that some reef areas consistently contribute high catch to the total SAU catch, the majority of reef was temporally variable in its annual contribution to observed catch.

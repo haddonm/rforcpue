@@ -882,26 +882,6 @@ tapsum <- function(indat,first,second,third=NA,div=1000) {
   return(result)
 } # end of tapsum
 
-#' @title toXL copies a data.frame or matrix to the clipboard
-#'
-#' @description toXL copies a data.frame or matrix to the clipboard
-#'    so one can then switch to Excel and just type <ctrl> + V to paste the
-#'    data in place
-#'
-#' @param x a vector or matrix
-#' @param output a boolean determining whether to print the object to the
-#'    screen as well as the clipboard; defaults to TRUE
-#' @return Places the object 'x' into the clipboard ready for pasting
-#' @export
-#' @examples
-#' datamatrix <- matrix(data=rnorm(100),nrow=10,ncol=10)
-#' colnames(datamatrix) <- paste0("A",1:10)
-#' rownames(datamatrix) <- paste0("B",1:10)
-#' toXL(datamatrix,output=TRUE)
-toXL <- function(x,output=TRUE) {
-   write.table(x,"clipboard",sep="\t")
-   if(output) print(x)
-}
 
 #' @title turnover estimate turnover of vessels from catch by vessel by year data
 #'

@@ -1,0 +1,11 @@
+# Researchers {#sec-researchers .unnumbered}
+
+The following researchers contributed to the work documented in this report
+
+-   Dr Craig Mundy
+
+-   Dr Bill Venables
+
+-   Adj Professor Cathy Dichmont
+
+-   Adj Professor Malcolm Haddon

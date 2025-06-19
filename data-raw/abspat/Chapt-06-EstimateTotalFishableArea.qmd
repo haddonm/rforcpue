@@ -1,0 +1,862 @@
+# Estimation of Total Fishable Area {#sec-chapter6} 
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| cache: false
+
+source("_common.R")
+library(patchwork)
+library(mixedup)
+library(makehtml)
+library(rforcpue)
+#library(abmaps)
+library(abspatR)
+library(codeutils)
+library(hplot)  # https://github.com/haddonm
+library(sf)
+library(flextable)
+library(dplyr)
+
+
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+```
+
+
+## Introduction
+
+GPS logger equipment is required to be carried by all divers within the Tasmanian abalone fishery since 2012. This section will consider that GPS based data across the years 2012-19. Only the Western and Eastern zones will be considered, which avoids the complication of the mixed fishery for blacklip *Haliotis rubra*) and greenlip (*H. laevigata*) abalone that can occur in the Northern and Bass Strait zones. The GPS based data is much more spatially detailed than the more classical docket data and provides an opportunity to describe the empirical geographical extent of the the fishery in each of the statistical blocks used in Tasmania in the fishery assessments. The docket data reports at a subblock area at its finest whereas the GPS data is reported every 10 seconds. This provides the possibility of characterizing the actual extent of fishable reef around Tasmania. The question to be addressed here is:
+
+What is the total fishable area of reef within each statistical block or Statistical Assessment Unit (SAU) in the eastern and western zones?
+
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.** Objective 3: **Identify methods for detecting hyper-stability in CPUE.**
+
+Objective 4: **Determine feasibility of spatial data based stock status determination in spatially structured fisheries **
+
+
+## Methods
+
+
+### Identifying noise in the hexagon grid cell data
+
+@mundy2012 describes generating: "A hexagon grid cell network extending from the coast to a distance of two kilometres offshore was created for the entire coast of Tasmania and all offshore islands." (@mundy2012, p42). Using software to count the number of GPS data points in each of these cells (each point represents 10 seconds of effort), allows the areal extent and real-time usage of the reefs to be monitored. The use of depth loggers by the divers enables any GPS data points obtained while the divers are not underwater, or when travelling by vessel to be eliminated from the dataset. However, because of the uncertainty added through the location of the dive vessel not being an exact reflection of the location of the diver there will be some cells which only appear to contain effort data, which, in reality, are only noise due to vessel drift. Thus, estimating the extent of the fishable reef is not a case of simply summing the number of cells within which effort is recorded. The intent here is to estimate the intentional fishing of the reef and to find a method that facilitates the removal of false positive cell records.
+
+In addition, of course, when a diver or set of divers fishes in a particular cell, they will only fish on rocky reefs that potential hold abalone. The cells are just a grid arranged around the coast and will contain reef and sandy habitats to different degrees. What this means is, even if it is possible to find a way in which to exclude those cells that only accidentally contain effort records, any sum of the remaining 1 Ha cells will be biased high.
+
+
+
+In this section the GPS logger data, summarized as 1 Ha cells, will be characterized and different approaches for selecting those cells that do not represent intentional abalone fishing will be compared to illustrate their effects. The objective is to identify the advantages and disadvantages of each approach and finally select the best compromise for identifying the total fishable area and subsequently for characterizing how the divers fish the reefs around Tasmania.
+
+
+First the cell data will be characterized to illustrate the available information. The assumption is that there are two types of cell, those that experience true intentional fishing and false positives that only appear to experience fishing because of vessel movement. Those that experience true fishing will be defined as **true** cells and those that are only accidental will be referred to as **false** cells.
+
+```{r "getGPSdata"}
+#| echo: false
+#| warning: false
+#| message: false
+
+bl <- readRDS(paste0(datadir,"bl.rds"))   # instead of lines 14 - 50 below.
+
+bl <- bl %>% rename(cell=oid, TIP=tipy)
+# bl <- bl[order(bl$cell),]
+# totE <- tapply(bl$minutes,bl$cell,sum,na.rm=TRUE)
+# totC <- tapply(bl$catch,bl$cell,sum,na.rm=TRUE)/1000
+# maxE <- tapply(bl$minutes,bl$cell,max,na.rm=TRUE)
+# 
+# 
+# ncell <- length(maxE)
+# cells <- as.integer(names(maxE))
+# n <- nrow(bl)
+# bl$totE <- NA
+# bl$totC <- NA
+# bl$maxE <- NA
+# for (i in 1:ncell) {  # this takes a while
+#   pick <- which(bl$cell == cells[i])
+#   bl$totE[pick] <- totE[i]
+#   bl$totC[pick] <- totC[i]
+#   bl$maxE[pick] <- maxE[i]
+# }
+prop <- properties(bl)
+# saveRDS(bl,file=paste0(rundir,"bl.rds"))
+```
+
+```{r  "summarizedata" }
+#| echo: false
+#| warning: false
+#| message: false
+
+
+cellsum <- summoid(bl)
+blk <- sort(unique(bl$block)) # now by blocks
+nblk <- length(blk)
+```
+
+Within the GPS data from 2012-19 (see **(@tbl-blfields)**, for all blacklip abalone , without further filtering there are `r textout(cellsum[1])` observations across a total of `r textout(cellsum[2])` separate 1 ha grid cells. These represent a total of `r textout(cellsum[4]/1000,3)` tonnes of catch from `r textout(cellsum[3]/60,2)` hours of effort across the eight years.
+
+
+```{r }
+#| label: tbl-blfields
+#| tbl-cap: "The data fields used in the TIP database for the years 2012-19, showing their general properties. 'coastdist is the distance in m of the centroid to the coast, divers is the number of unique divers that have visted an cell across years, exposure is an index of wave exposure, count_yr = occur, totE, totC, and maxE reflect cell values across all years."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+#kable(prop, align="r",  booktabs = TRUE)
+
+
+ prop |> tibble::rownames_to_column(var = "varname") 
+
+```
+
+  
+
+The parts of **(@tbl-tabOC1a)** that will be used are:
+
+1)  **minutes**, each cell sums up the number of GPS data points it contains. That number divided by 6 gives the number of minutes of effort.
+2)  **divers**, the number of separate dives that contribute to the effort in a cell is the number of divers it contains.
+3)  **catch** is obtained by dividing the reported catch for each dive by the number of 10 second GPS points in that dive and allocating that catch relative to the number of points in each cell visited. As the catch per dive (and per number of GPS points) differs between divers it is only the effort data that is invariant between divers.
+4)  **year** is the standard calendar year over which quotas are allocated.
+5)  **TIP** has been explained elsewhere. It is derived from the cumulative catch curve for the selected region of the fishery (in the cases considered here that is limited to statistical blocks), which is subdivided into four quartiles on the y-axis (25th, 50th and 75th). With eight years of data the maximum value possible is 32
+6)  **occur** is simply the number of years, across the eight available, in which effort is recorded in a cell.
+7)  **totE** is the total effort recorded within the same cell across the eight years.
+8)  **totC** is the total catch recorded within each cell across the eight years.
+9)  **maxE** is the maximum effort in any of the years for which effort is recorded within each cell.
+
+  
+
+### Example Blocks
+
+Four example blocks will be used to illustrate how the cell summary data can be used to describe the spatial dynamics of fishing; only blacklip abalone data (*Haliotis rubra*) will be used. Analyses will be conducted on all four blocks but the results for some blocks may be relegated to an appendix to allow the text to progress more fluidly. The example blocks are:
+
+1)  Block 6 in the Northern Zone is an example of a block that has been heavily exploited and in 2008 had its Legal Minimum Size reduced from 136mm to 132mm following an industry driven initiative.\
+2)  Block 11 from the Western Zone is an example of a highly productive west coast block whose catches were increased following zonation in 2000 and experienced a long decline in CPUE following that increase.\
+3)  Block 13 in the Eastern Zone is the primary fishing block on the east coast of Tasmania. Its productivity is remarkable with catches averaging 250 t with rather large changes through time. The productivity is largely based around the Actaeon Islands in subblock 13E.
+4)  Block 21 in the Eastern Zone had a long history of catches of around 50 tonnes from 1992 - 2011, followed by lower catches of about 20 t.
+
+```{r "pickout example blocks"}
+#| echo: false
+#| warning: false
+#| message: false
+
+pickE <- which((bl$zone == "E") & (bl$block %in% c(13, 21)))
+pickN <- which((bl$zone == "N") & (bl$block == 6))
+pickW <- which((bl$zone == "W") & (bl$block == 11))
+pickall <- c(pickE,pickN,pickW)
+blb <- bl[pickall,]
+blb <- blb[order(blb$cell),]
+# catch by year by block
+cbybb <- tapply(blb$catch,list(blb$year,blb$block),sum,na.rm=TRUE)/1000
+#  records by year by block
+rbybb <- tapply(blb$catch,list(blb$year,blb$block),countgtzero)
+ebybb <- tapply(blb$minutes,list(blb$year,blb$block),sum,na.rm=TRUE)
+```
+
+## Results
+
+```{r}
+#| label: fig-figOC1a
+#| fig-cap: "The annual catch, hours of effort, and ratio cpue (total catch/total effort) in the GPS data logger data set for each of the four example blocks."
+#| fig-pos: "H"
+#| fig-width: 6
+#| fig-height: 7.5
+#| echo: false
+#| warning: false
+#| message: false
+
+
+yrs <- as.numeric(rownames(cbybb))
+blks <- colnames(cbybb)
+nblk <- length(blks)
+ymax <- getmax(cbybb)
+parset(plots=c(3,1),margin = c(0.3,0.45,0.1,0.1)) 
+plot1(yrs,cbybb[,blk[1]],lwd=2,defpar=FALSE,maxy=ymax, ylab="Annual Catch (t)")
+for (i in 2:nblk) lines(yrs,cbybb[,blk[i]],lwd=2,col=i)
+legend(x=2018,y=130,legend=blks,col=1:nblk,lwd=3,bty="n",cex=1.2)
+hbybb <- ebybb/60  # hours of effort
+ymax <- getmax(hbybb)
+plot1(yrs,hbybb[,blk[1]],lwd=2,defpar=FALSE,maxy=ymax, ylab="Hours Effort per Year")
+for (i in 2:nblk) lines(yrs,hbybb[,blk[i]],lwd=2,col=i)
+cpue <- 1000*cbybb/hbybb 
+ymax <- getmax(cpue)
+plot1(yrs,cpue[,blk[1]],lwd=2,defpar=FALSE,maxy=ymax, ylab="Ratio CPUE kg/hr per Year")
+for (i in 2:nblk) lines(yrs,cpue[,blk[i]],lwd=2,col=i)
+```
+
+
+While the catch levels in block 13 east approximately match those in block 11 the effort is much greater, which explains the higher CPUE in block 11. The results for block 6 illustrate its slow depletion over the 8 years and for block 21 demonstrate its relative stability.
+
+
+```{r "count the cells by block"}
+#| echo: false
+#| warning: false
+#| message: false
+
+columns <- c("nobs","ncells","hours","catch t","catchKg/hex","RatioCE")
+countcells <- matrix(0,nrow=nblk,ncol=length(columns),dimnames=list(blks,columns))
+for (i in 1:nblk) {
+  pick <- which(blb$block == as.numeric(blks[i]))
+  tmp <- summoid(blb[pick,],effort=0.01)
+  countcells[i,] <- c(tmp[1:2],tmp[3]/60,tmp[4]/1000,tmp[4]/tmp[2],
+                     tmp[4]/(tmp[3]/60))
+}
+```
+
+  
+
+
+```{r }
+#| label: tbl-tabOC1a
+#| tbl-cap: "Summary information for each block across all years. nobs is the number of observations or records, ncells is the number of unique cells reporting effort, hours is the total effort, catch is the total catch, catchKg/Hex is the average catch in Kg per cell per block, and the RatioCE is the ratio CPUE for the block averaged across years."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+kable(countcells,digits=c(0,0,1,3,3,3),row.names=TRUE,  booktabs = TRUE)
+```
+
+Block 11 has more than double the apparent area of any other block but the averaged catch per cell in block 13 is more than double that in block 11. These differences become apparent once a strategy is implemented for removing false positive cells from consideration.
+
+### Frequency of Occurrence of Records
+
+By tabulating the frequency of occurrence of records for each combination of occur and TIP it becomes apparent that most cells are visited in fewer than eight years. For example, by considering only block 11 (18178 / 24730 = 0.735; 73.5% visited in only 1 - 7 years)
+
+```{r "Blk11 analysis", echo=TRUE }
+#| echo: false
+#| warning: false
+#| message: false
+
+pickB <- which(blb$block == 11)
+ble <- blb[pickB,]
+celloccur <- table(ble$TIP,ble$occur)
+```
+
+
+There are only 5881 unique cells with reported effort in block 11 across the years 2012-19. There are 24730 records because many cells occur in multiple years. An alternative view would be to determine the number of unique cells found in each combination of occur and TIP. Note in the column of occur = 8 it is possible to divide each value by 8 to determine the number of unique cells, and the values in occur = 1 already equal the number of unique cells. However, in all other combinations the number of unique cells would need to be determined individually. The equivalent analyses for the other example blocks can be found in the appendix.
+
+```{r "getuniquecells for 11", echo=TRUE }
+#| echo: false
+#| warning: false
+#| message: false
+
+# Get unique cells for each occur vs TIP combination
+celloccur <- fillmat(celloccur,replace=0)
+uncell <- matrix(0,nrow=32,ncol=8,dimnames=list(1:32,1:8))
+uncell[,1] <- celloccur[,1]
+uncell[,8] <- celloccur[,8]/8
+for (i in 2:7) {
+  for (j in 1:32) {
+    if (celloccur[j,i] > 0) {
+      pickO <- which((ble$occur == i) & (ble$TIP == j))
+      uncell[j,i] <- length(unique(ble$cell[pickO]))
+    }
+  }
+}
+```
+
+\newpage
+
+```{r "occur vs TIP for blk11"}
+#| label: tbl-tabOC2
+#| tbl-cap: "The frequency of occurrence of each combination of occur and TIP within the 24730 observations within block 11's dataset."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+kable(celloccur,row.names=TRUE,  booktabs = TRUE)
+
+
+```
+
+\newpage
+ 
+```{r "uniquecells for 11" }
+#| label: tbl-tabOC3
+#| tbl-cap: "The frequency of occurrence of unique cells in each combination of occur and TIP within the 5881 unique cells within block 11's dataset."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+kable(uncell,row.names=TRUE,  booktabs = TRUE)
+```
+
+  
+
+```{r "calc the proportions", echo=TRUE}
+#| echo: false
+#| warning: false
+#| message: false
+
+propcell <- matrix(0,nrow=3,ncol=8,dimnames=list(c("N","Prop","CumProp"),1:8))
+propcell[1,] <- colSums(uncell)
+propcell[2,] <- propcell[1,]/sum(propcell[1,],na.rm=TRUE)
+propcell[3,] <- cumsum(propcell[2,])
+```
+
+  
+
+If the proportions in each *occur* column are determined, **(@tbl-tabOC4)**, the proportion of unique cells experiencing less than 8 years of fishing is up to 86%, and there are 21.6% that are only fishing in single years. If, however, the distribution of minutes of effort is considered (**@fig-figOC2**) it is clear that there are a large number of cells x year observations that contain only very small amounts of effort minutes. A value of less than around 3 minutes would not normally represent where a fisher has intentionally entered the water and then changed their minds and exit so as to fish elsewhere. The important point is whether the diver entered the water with the intention of fishing, which assumes they would only enter the water where they would expect to find abalone. It may be the case that they then almost immediately exit the water to try elsewhere but at least they entered the water intentionally. A threshold of 3 minutes appears to be a minimum period that would be highly unlikely to represent an intentional water entry. Somewhere between 3 - 5 minutes would be required to assess an area to be worthwhile spending any time searching.
+
+
+
+```{r "proportions of occur1"}
+#| label: tbl-tabOC4
+#| tbl-cap: "The proportion of cells experiencing different numbers of years of fishing."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+kable(digitsbyrow(propcell,digits=c(0,3,3)),align="r",  booktabs = TRUE)
+```
+
+  
+
+```{r "effortminutesin block11"}
+#| label: fig-figOC2
+#| fig-cap: "The distribution of effort as minutes in each cell within block 11. The lower plot is identical to the upper plot except with an upper bound of 60 minutes and breaks at 3 minutes so as to expand the visibility of the smaller values."
+#| fig-pos: "H"
+#| fig-width: 6
+#| fig-height: 4
+#| echo: false
+#| warning: false
+#| message: false
+
+
+parset(plots=c(2,1),margin = c(0.4,0.45,0.1,0.1)) 
+hist(ble$minutes,main="",xlab="Minutes") 
+uphist(ble$minutes,maxval=60,main="",xlab="Minutes (maximum at 100)",breaks=seq(0,60,length=20)) 
+```
+
+
+### Catch by TIP Value
+
+Now that the notion of TIP and occur have been introduced it is possible to plot out the frequency of records by TIP as well as the catch per TIP value.
+
+```{r "plotTIPfequencies"}
+#| label: fig-figOC3
+#| fig-cap: "The frequency distribution of the TIP index for each example statistical block, 6N, 11W, 13E, 21E."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 4.5
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+# plot TIP by block across years 2012 - 2019 -------------------------------
+tiptable <- blocktipprops(blb,effort=0.01)
+maxt <- 32
+TIPcount <- matrix(0,nrow=maxt,ncol=nblk,dimnames=list(1:maxt,blks))
+parset(plots=pickbound(nblk),margin=c(0.3,0.3,0.05,0.05),
+       outmargin=c(1.25,1.25,0,0),byrow=FALSE)
+for (i in 1:nblk) { # i = 5
+  pickB <- which(blb$block == blks[i])
+#  ans <- tapply(blb[pickB,"minutes"],blb[pickB,"TIP"],sum,na.rm=TRUE)/60
+  ans <- rowSums(table(blb$TIP[pickB],blb$occur[pickB]))
+  if (length(ans) < maxt) ans <- fillmat(ans,rown=maxt)
+  vals <- 1:maxt
+  counts <- ans
+  res <- cbind(vals,counts)
+  outh <- inthist(res,width=0.9,border=3,col=2,main=blks[i],roundoff = FALSE)
+  TIPcount[,i] <- outh[,"counts"]
+  maxy <- max(outh[,"counts"],na.rm=TRUE) # tiptable from line 296
+  text(0.75*maxt,1.1*maxy,paste0("records ",tiptable[i,1]),cex=1,pos=4)
+  text(0.75*maxt,1.0*maxy,paste0("cells     ",tiptable[i,2]),cex=1,pos=4)
+  text(0.75*maxt,0.9*maxy,paste0("hours ",trunc(tiptable[i,3])),cex=1,pos=4)
+  text(0.75*maxt,0.8*maxy,paste0("catch ",round(tiptable[i,4],3)),cex=1,pos=4)
+#  text(0.75*maxt,0.575*maxy,paste0("tip1    ",outh[1,"counts"]),cex=1,pos=4)
+ # text(0.75*maxt,0.475*maxy,paste0("area*   ",gpscount[i,11]),
+ #      cex=1,pos=4)
+}  
+mtext("TIP value",side=1,outer=TRUE,cex=1.1)  
+mtext("Number of Records",side=2,outer=TRUE,cex=1.1)  
+
+```
+
+
+```{r "plotTIPcatches1"}
+#| label: fig-figOC4
+#| fig-cap: "The distribution of catches for each TIP value for each example statistical block, 6N, 11W, 13E, 21E. The Eastern Zone blocks have more weight towards the higher TIP values."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 4.5
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+# plot TIP by block across years 2012 - 2019 -------------------------------
+#tiptable <- blocktipprops(blb,effort=0.01)
+maxt <- 32
+TIPcatch <- matrix(0,nrow=maxt,ncol=nblk,dimnames=list(1:maxt,blks))
+parset(plots=pickbound(nblk),margin=c(0.3,0.3,0.05,0.05),
+       outmargin=c(1.25,1.25,0,0),byrow=FALSE)
+for (i in 1:nblk) { # i = 5
+  pickB <- which(blb$block == blks[i])
+  ans <- tapply(blb[pickB,"catch"],blb[pickB,"TIP"],sum,na.rm=TRUE)/1000
+  if (length(ans) < maxt) ans <- fillmat(ans,rown=maxt)
+  vals <- 1:maxt
+  counts <- ans
+  res <- cbind(vals,counts)
+  outh <- inthist(res,width=0.9,border=3,col=2,main=blks[i],roundoff=FALSE)
+  TIPcatch[,i] <- outh[,"counts"]
+  maxy <- max(outh[,"counts"],na.rm=TRUE) # tiptable from line 296
+  text(0.75*maxt,1.1*maxy,paste0("records ",tiptable[i,1]),cex=1,pos=4)
+  text(0.75*maxt,1.0*maxy,paste0("cells     ",tiptable[i,2]),cex=1,pos=4)
+  text(0.75*maxt,0.9*maxy,paste0("hours ",trunc(tiptable[i,3])),cex=1,pos=4)
+  text(0.75*maxt,0.8*maxy,paste0("catch ",round(tiptable[i,4],3)),cex=1,pos=4)
+}  
+mtext("TIP value",side=1,outer=TRUE,cex=1.1)  
+mtext("Catch (t) per TIP value",side=2,outer=TRUE,cex=1.1)  
+
+```
+
+  
+
+```{r "plotTIPcatches2"}
+#| label: fig-figOC5
+#| fig-cap: "The mean catch per TIP value with 99% Normal CI for each example statistical block, 6N, 11W, 13E, 21E. The number of observations for each TIP value are so large that the CI are all small except for the TIP values with low representation."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 5
+#| echo: false
+#| warning: false
+#| message: false
+
+
+# plot TIP by block across years 2012 - 2019 -------------------------------
+#tiptable <- blocktipprops(blb,effort=0.01)
+
+calcCI <- function(av,std,count,normCI=TRUE,P=0.95) {
+  if (!normCI) {
+    Zmult <- -qnorm((1-(P/100))/2.0)
+    lower <- av * exp(-Zmult*(std/count))
+    upper <- av * exp(Zmult*(std/count))
+  } else {
+    pval <- 1-(1-P)/2.0
+    Zmult <- qnorm(p=pval,mean=0,sd=std/count)
+    lower <- av - Zmult
+    upper <- av + Zmult
+  }
+  return(list(lower=lower,upper=upper))
+} # end of calcCI   
+   
+maxt <- 32
+meancatch <- matrix(0,nrow=maxt,ncol=nblk,dimnames=list(1:maxt,blks))
+sdcatch <- matrix(0,nrow=maxt,ncol=nblk,dimnames=list(1:maxt,blks))
+countcatch <- matrix(0,nrow=maxt,ncol=nblk,dimnames=list(1:maxt,blks)) 
+parset(plots=pickbound(nblk),margin=c(0.3,0.3,0.05,0.05),
+       outmargin=c(1.25,1.25,0,0),byrow=FALSE)
+for (i in 1:nblk) { # i = 1
+  pickB <- which(blb$block == blks[i])
+  meancatch[,i] <- fillmat(tapply(blb[pickB,"catch"],blb[pickB,"TIP"],mean,na.rm=TRUE))
+  sdcatch[,i] <- fillmat(tapply(blb[pickB,"catch"],blb[pickB,"TIP"],sd,na.rm=TRUE))
+  countcatch[,i] <- fillmat(rowSums(table(blb$TIP[pickB],blb$occur[pickB])))
+  CI <- calcCI(meancatch,sdcatch,countcatch,normCI=TRUE,P=0.99)
+  lower <- CI$lower
+  upper <- CI$upper
+  maxy <- getmax(upper[,i])
+  plot(1:maxt,meancatch[,i],type="p",pch=16,cex=0.75,ylim=c(0,maxy),xlab="",
+       ylab="")
+  for (j in 1:maxt) lines(c(j,j),c(lower[j,i],upper[j,i]),lwd=2)
+  text(0.05*maxt,0.95*maxy,paste0("records ",tiptable[i,1]),cex=1,pos=4)
+  text(0.05*maxt,0.85*maxy,paste0("cells     ",tiptable[i,2]),cex=1,pos=4)
+  text(0.05*maxt,0.75*maxy,paste0("hours ",trunc(tiptable[i,3])),cex=1,pos=4)
+  text(0.05*maxt,0.65*maxy,paste0("catch ",round(tiptable[i,4],3)),cex=1,pos=4)
+  mtext(blks[i],side=3,line=-1.5,cex=1.25)
+}  
+mtext("TIP value",side=1,outer=TRUE,cex=1.1)  
+mtext("Mean Catch (kg) per TIP value",side=2,outer=TRUE,cex=1.1)  
+
+```
+
+
+
+```{r "plotTIPcatches3"}
+#| label: fig-figOC6
+#| fig-cap: "The mean catch per TIP value by year with 99% Normal CI for example statistical block 6N."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+
+pickB <- which(blb$block == 6)
+blp <- blb[pickB,]
+yrs <- sort(unique(blp$year))
+nyr <- length(yrs)
+meancatch <- matrix(0,nrow=maxt,ncol=nyr,dimnames=list(1:maxt,yrs))
+sdcatch <- matrix(0,nrow=maxt,ncol=nyr,dimnames=list(1:maxt,yrs))
+countcatch <- matrix(0,nrow=maxt,ncol=nyr,dimnames=list(1:maxt,yrs)) 
+parset(plots=pickbound(nyr),margin=c(0.3,0.3,0.05,0.05),
+       outmargin=c(1.25,1.25,0,0),byrow=FALSE)
+for (i in 1:nyr) { # i = 1
+  pickY <- which(blp$year == yrs[i])
+  meancatch[,i] <- fillmat(tapply(blp[pickY,"catch"],blp[pickY,"TIP"],mean,na.rm=TRUE))
+  sdcatch[,i] <- fillmat(tapply(blp[pickY,"catch"],blp[pickY,"TIP"],sd,na.rm=TRUE))
+  countcatch[,i] <- fillmat(rowSums(table(blp$TIP[pickY],blp$occur[pickY])))
+  CI <- calcCI(meancatch,sdcatch,countcatch,normCI=TRUE,P=0.95)
+  lower <- CI$lower
+  upper <- CI$upper
+  maxy <- getmax(upper[,i])
+  plot(1:maxt,meancatch[,i],type="p",pch=16,cex=0.75,ylim=c(0,maxy),xlab="",
+       ylab="")
+  for (j in 1:maxt) lines(c(j,j),c(lower[j,i],upper[j,i]),lwd=2)
+  text(0.05*maxt,0.95*maxy,paste0("records ",length(pickY)),cex=1,pos=4)
+  text(0.05*maxt,0.85*maxy,paste0("cells     ",
+                                  length(unique(blp$cell[pickY]))),cex=1,pos=4)
+  text(0.05*maxt,0.75*maxy,paste0("hours ",
+                    round(sum(blp$minutes[pickY],na.rm=TRUE)/60,3)),cex=1,pos=4)
+  text(0.05*maxt,0.65*maxy,paste0("catch ",
+                    round(sum(blp$catch[pickY],na.rm=TRUE)/1000,3)),cex=1,pos=4)
+  mtext(yrs[i],side=3,line=-1.5,cex=1.25)
+}  
+mtext("TIP value",side=1,outer=TRUE,cex=1.1)  
+mtext("Mean Catch (kg) per TIP value",side=2,outer=TRUE,cex=1.1)  
+
+```
+
+
+## Alternative Approaches to Select for Effort
+
+There are at least three different ways that one could select some chosen minimum level of effort:
+
+1)  Select X minutes from the **\$minutes** field in the dataset.
+2)  Select Y minutes from the **\$totE** field in the dataset.
+3)  Select Z minutes from the **\$maxE** field in the dataset.
+
+
+The use of X, Y, and Z minutes in the different approaches is merely to represent that because they are different approaches, different levels of effort might be required to gain the desired effect. While there are these alternatives there are some good reasons to exclude two of the options.
+
+If one were to select against, for example, every cell by year combination where **\$minutes** \<= X minutes, this would certainly remove every instance of cells where only small amounts of effort were expressed. However, this only removes the individual records in each year in which such records occur. This does not appear to be what is needed when attempting to estimate the total fishable areas of reefs where intentional fishing occurs. While this approach would find all cells in each year that have \<= 5 minutes, many of those may have much more effort in other years and so really contribute to the total fishable area (they are just not used in every year). This can be illustrated by selecting the unique cells that have at least one year where \<= 3 minutes of effort are expressed. If all effort levels for those cells are plotted then much great levels of effort are present in at least some of them in other years (**@fig-figOC7**).
+
+```{r "cells with range of effort", echo=TRUE}
+#| echo: false
+#| warning: false
+#| message: false
+
+pickL <- which(blb$minutes <= 3)
+cells <- unique(blb[pickL,"cell"])
+pickO <- which(blb$cell %in% cells)
+lt3 <- blb[pickO,]
+```
+
+  
+
+```{r "effortwhenminsLTE3used"}
+#| label: fig-figOC7
+#| fig-cap: "The distribution of effort as minutes in each unique cell within block 11 that has at least one year where effort was <= 3 minutes. The lower plot is identical to the upper plot except with an upper bound of 50 minutes so as to expand the visibility of the smaller values."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 4
+
+
+parset(plots=c(2,1),margin = c(0.4,0.45,0.1,0.1)) 
+hist(lt3$minutes,main="",xlab="Minutes") 
+uphist(lt3$minutes,maxval=60,main="",xlab="Minutes (maximum at 100)",
+       breaks=seq(0,60,length=20)) 
+```
+
+
+Using a selection criterion with the *totE* field has different but related problems. The range of effort expended within each cell can vary markedly between years and by using the total effort across years even if one were to use some low value, such as 5 minutes, this might arise from a series of seven very low values and one large value.
+
+Following this train of thought it appears that the optimum approach would be to select some level of the maximum effort that occurs across all years. If a maximum effort (*maxE*) of 3 minutes or less is selected this ensures that there are no unexpectedly high years hidden within the selection and that the cells selected will be removed from all years. The question remains of what level of maximum effort across all years should be used to select against false positive cell records. By plotting up the effect of selecting for a range of different *maxE* values any discontinuities in the observed data can be made apparent. If there are no discontinuities then some value that would represent the time that would exclude any intentional fishing should be selected.
+
+```{r "search different maxE values", echo=TRUE}
+#| echo: false
+#| warning: false
+#| message: false
+
+effrange=seq(1,20,0.5)
+N <- length(effrange)
+columns <- c("maxE","ncell","select","prop","catch","propcatch")
+result <- matrix(0,nrow=N,ncol=length(columns),dimnames=list(effrange,columns))
+ans <- vector(mode="list",length=nblk)
+cols2 <- c("ncell","catch")
+blkchar <- matrix(0,nrow=nblk,ncol=length(cols2),dimnames=list(blks,cols2))
+names(ans) <- blks
+for (blck in 1:nblk) {
+  pickB <- which(blb$block == blks[blck])
+  ble <- blb[pickB,]
+  uncells <- length(unique(ble$cell))
+  catch <- sum(ble$catch,na.rm=TRUE)
+  blkchar[blck,] <- c(uncells,catch)
+  for (step in 1:N) {
+    efflim <- effrange[step]
+    countmaxE <- matrix(0,nrow=32,ncol=8,dimnames=list(1:32,1:8))
+    sumcatch <- countmaxE
+    for (i in 1:8) {
+      for (j in 1:32) {
+        pickC <- which((ble$occur == i) & (ble$TIP == j))
+        combto <- ble[pickC,]
+        pickE <- which(combto$maxE <= efflim)
+        if (length(pickE) > 0) {
+           lowcells <- unique(combto[pickE,"cell"]) 
+           countmaxE[j,i] <- length(lowcells)
+           sumcatch[j,i] <- sum(combto[pickE,"catch"])
+        }
+      }
+    }
+    result[step,] <- c(efflim,uncells,sum(countmaxE),sum(countmaxE)/uncells,
+                       sum(sumcatch),sum(sumcatch)/catch)
+  } # effort step
+  ans[[blck]] <- result
+#  cat(blks[blck],uncells,"\n")
+}
+```
+
+  
+
+```{r "plotmaxEsearch"}
+#| label: fig-figOC8
+#| fig-cap: "The proportion of the unique cells reported in each example block selected by different values of the maximum effort across years value (maxE). There are no obvious inflection points in any block and the vertical red line at 3 minutes is the nominally selected value of maxE that will be used leading to percentages of cells excluded of 14.3, 13.7, 11.4 and 17.1 in blocks 6, 11, 13, and 21, respectively."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 7
+#| echo: false
+#| warning: false
+#| message: false
+
+
+
+parset(plots=c(2,1),cex=1.0)
+result <- ans[[1]]
+plot(effrange,result[,"prop"],type="l",lwd=2,ylim=c(0,0.52),
+      ylab="Proportion Hexagons <= X value",xlab="maxE Value",
+     panel.first = grid(),yaxs="i")
+for (i in 2:nblk) {
+  result <- ans[[i]]  
+  lines(effrange,result[,"prop"],lwd=2,col=i)
+}
+abline(v=3,lwd=1,col=2)
+legend("bottomright",legend=blks,col=1:nblk,lwd=3,bty="n",cex=1.25)  
+
+result <- ans[[1]]
+plot(effrange,result[,"propcatch"],type="l",lwd=2,
+     ylim=c(0,0.045),ylab="Proportion of Total Block Catch",xlab="maxE Value",
+     panel.first = grid(),yaxs="i")
+for (i in 2:nblk) {
+  result <- ans[[i]]  
+  lines(effrange,result[,"propcatch"],lwd=2,col=i)
+}
+abline(v=3,lwd=1,col=2)
+legend("topleft",legend=blks,col=1:nblk,lwd=3,bty="n",cex=1.25)  
+```
+
+
+#### Update Fishable Area
+
+```{r "getselectedarea", echo=TRUE}
+#| echo: false
+#| warning: false
+#| message: false
+
+finalarea <- countcells[,c(1,3,4,2,5,6)]
+colnames(finalarea) <- c(colnames(countcells)[c(1,3,4,2)],"area*","fishable Ha")
+for (i in 1:nblk) finalarea[i,"area*"] <- ans[[i]]["3","prop"] * 
+                                                       countcells[i,"ncells"]
+finalarea[,"fishable Ha"] <- finalarea[,"ncells"] - finalarea[,"area*"]
+```
+
+
+```{r "proportions of occur2"}
+#| label: tbl-tabOC5
+#| tbl-cap: "Summary information for each block across year. ncells is the total number of unique cells identified in the observations for each block, area* is the number of cells selected with maximum effort levels of <= 3 minutes, and fishable Ha is the estimated fishable reef area in hectares after the false positive cells are removed."
+#| fig-pos: "H"
+
+kable(finalarea,digits=c(0,1,3,0,0,0),  booktabs = TRUE)
+```
+
+  
+
+## Discussion and Implications
+
+The proportion of false positive cells is surprisingly high although most occur in the TIP = 1 by occur = 1 combination (i.e. the cell occurs in only one year, and is in the lowest quartile of catch for that year) . There were no occurrences of low maxE values in TIP values greater than 8.
+
+```{r "countmaxE for 3 minutes",echo=TRUE}
+#| echo: false
+#| warning: false
+#| message: false
+
+blkans <- vector(mode="list",length=nblk)
+names(blkans) <- blks
+efflim <- 3.0
+for (blck in 1:nblk) {
+  pickB <- which(blb$block == blks[blck])
+  ble <- blb[pickB,]
+  countmaxE <- matrix(0,nrow=32,ncol=8,dimnames=list(1:32,1:8))
+  sumcatch <- countmaxE
+  allcells <- NULL
+  for (i in 1:8) {
+    for (j in 1:32) {
+      pickC <- which((ble$occur == i) & (ble$TIP == j))
+      if (length(pickC) > 0) {
+        combto <- ble[pickC,]
+        pickE <- which(combto$maxE <= efflim)
+        if (length(pickE) > 0) {
+          lowcells <- unique(combto[pickE,"cell"]) 
+          allcells <- c(allcells,lowcells)
+          countmaxE[j,i] <- length(lowcells)
+          sumcatch[j,i] <- sum(combto[pickE,"catch"])
+        }
+      }
+    }
+  }
+  blkans[[blck]] <- list(allcells=sort(allcells),countmaxE=countmaxE,
+                         sumcatch=sumcatch)
+}
+```
+
+
+
+```{r "proportions of occur3"}
+#| label: tbl-tabOC6
+#| tbl-cap: "The count of cells in block 6 having a maxE value <= 3 in each combination of TIP and occur (see appendix for the other block results."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+countmaxE <- blkans[[1]]$countmaxE
+kable(countmaxE[1:8,],row.names=TRUE,  booktabs = TRUE)
+```
+
+
+
+The proportion of cells in each block with maxE values \<= 3 minutes was always greater than 10%, but the proportion of catch lost in this manner was always less than 0.2% of the total, and in the case of block 13 was only 0.026%.
+
+  
+
+```{r "summaryacross blocks"}
+#| label: tbl-tabOC7
+#| tbl-cap: "A summary across blocks of the result of selecting on maxE <= 3 minutes."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+blkres <- rbind(ans[[1]][5,],ans[[2]][5,],ans[[3]][5,],ans[[4]][5,])
+columns <- colnames(blkres)
+blkres <- cbind(blkres,blkchar[,"catch"])
+rownames(blkres) <- blks
+colnames(blkres) <- c(columns,"totalcatch")
+kable(blkres,digits=c(0,0,0,4,3,5,1),row.names=TRUE,  booktabs = TRUE)
+```
+
+  
+
+Despite the misplaced catch being such a small proportion of the total this selection against false positive cells implies that, in order to obtain accurate summary statistics relating to catch rates and related matters, the missing catches will need to be redistributed back into the cells in which most of the fishing from such events occurred. Given the relatively high number of individual cells affected in each block (**@tbl-tabOC7**), this is not a rapid or simple task. At a minimum the analyses should be restricted to those cells assumed to represent the true fishable reef area. This would entail removing those cell identified are false positives.
+
+For example, if we consider one of the example blocks, we shall use block 13, the total number of unique cells used across the eight years is known. The number of cells visited in any single year is known (labelled 'records'). It is also possible to identify how many of the total unique cells were visited for the first time in each year (labelled 'new'). Similarly, how many of the cells visited in a year had been visited in the previous year ('prevyr'). By knowing the total unique cells it is also possible to tabulate how many of the total were not visited in a given year ('missed'). The catch and effort per year can also be added as can the proportion of the total known area that was used (**@tbl-tabOC8**).
+
+
+```{r "cell_use_through_years"}
+#| label: tbl-tabOC8
+#| tbl-cap: "A summary of the grid cell use across years for block 6."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+  pickB <- which(blb$block == 6)
+  ble <- blb[pickB,]
+  ble <- ble %>% rename(oid = cell)
+  
+  outall <- gethexdat(ble)
+  
+    kable(outall,digits=c(0,0,0,0,0,3,3,3),row.names=TRUE,  booktabs = TRUE)
+```
+
+  
+
+But this outcome (**@tbl-tabOC8**) uses all known cells including those that we now assume are false positives. If those are removed by excluding all cells with maxE \<= 3 minutes, rather different results are forthcoming.
+
+```{r "annual proportion used by year by block"}
+#| echo: false
+#| warning: false
+#| message: false
+
+outtrim <- vector(mode="list",length=nblk); names(outtrim) <- blks
+for (blck in 1:nblk) {
+  pickB <- which(blb$block == blks[blck])
+  ble <- blb[pickB,]
+  ble <- ble %>% rename(oid = cell)
+  pickE <- which(ble$maxE > 3.0)
+  blet <- ble[pickE,]
+  outtrim[[blck]] <- gethexdat(blet)
+}
+```
+
+
+```{r "cell_use_through_years-trimmed"}
+#| label: tbl-tabOC9
+#| tbl-cap: "A summary of the grid cell use across years for block 6 after all cells with maximum effort levels <= 3 minutes are excluded.  The final column 'propused' refers to the proportion of cells used in that year."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+  kable(outtrim[[1]],digits=c(0,0,0,0,0,3,3,3),row.names=TRUE,  booktabs = TRUE)
+```
+
+   
+
+Comparing the two tables **@tbl-tabOC8** and **@tbl-tabOC9** the cumulative number of unique cells ('cumul') differs in 2019 by 318 (as predicted by **@tbl-tabOC7**). The 'known' area of reef has been empirically defined as those cells with intentional fishing. The effect or removing the false positive cells is to increase the proportion of the total used each year. However, even with this increase it is clear that the proportion of the known reef used in any single year can be only a fraction of the total.
+
+In block 6, the proportion used in the last two years was unusually low, which reflected the very low catches. In the other years, however, the proportion of the known area used varied from 0.587 - 0.682 with an average of 0.643. Block 11 (see appendix) was similar varying from 0.51 - 0.658. The blocks from the east coast used a somewhat higher proportion with block 13 varying from 0.601 - 0.808, while block 21 varied between 0.542 - 0.766.
+
+```{r "make prop table"}
+#| echo: false
+#| warning: false
+#| message: false
+
+columns <- c("ReefArea","minimum","maximum","average")
+proptab <- matrix(0,nrow=nblk,ncol=length(columns),dimnames=list(blks,columns))
+for (blck in 1:nblk) {
+  x <- outtrim[[blck]]
+  proptab[blck,] <- c(x["2019","cumul"],range(x[,"propused"]),mean(x[,"propused"]))
+  
+}
+```
+
+
+```{r "reefarea_use_through_years-trimme6"}
+#| label: tbl-tabOC10
+#| tbl-cap: "The range of the total known reef area used across years for all blocks after all cells with effort levels <= 3 minutes are excluded. Block 6 should really not include the last two years as they were exceptionally low. The final column 'propused' refers to the proportion of cells used in that year."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+  kable(proptab,digits=c(0,3,3,3),row.names=TRUE,  booktabs = TRUE)
+```
+
+  
+
+
+```{r child="6_appendix.Rmd"}
+
+```

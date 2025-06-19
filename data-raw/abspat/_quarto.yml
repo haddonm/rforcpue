@@ -1,0 +1,229 @@
+project:
+  type: book
+  output-dir: _book
+book:
+  title: "Can spatial fishery-dependent data be used to determine stock status in a spatially structured fishery?"
+  subtitle: "FRDC Final Report Project 2017-026"
+  author:
+    - name: Craig Mundy
+      affil-id: 1
+    - name: Bill Venables
+      affil-id: 2
+    - name: Malcolm Haddon
+      affil-id: 1,3
+    - name: Catherine Dichmont
+      affil-id: 1,4
+
+      affiliations:
+        - id: 1
+          name: IMAS, University of Tasmania
+          department: IMAS-FA
+        - id: 2
+          name: Venables Institute for Advanced Statistics
+        - id: 3
+          name: Haddon.Net
+        - id: 4
+          name: CDC-Consulting
+
+  #date: last-modified
+  #date-format: "[Last Updated on] DD MMMM, YYYY"
+  isbn: 978-3-8474-1017-1
+  page-navigation: true
+
+  chapters:
+    - index.qmd
+    - objectives.qmd
+    - Chapt-00-intro.qmd
+    #- part: part-PMproperties.qmd
+    - part: "Performance Measure Properties"
+      chapters:
+        - Chapt-01-dataproperties.qmd
+    - part: part-optimisespatial-kud.qmd
+      chapters:
+        - Chapt-02-standardisation-strategy.qmd
+        - Chapt-03-importance-of-scale.qmd
+        - Chapt-04-hyperstability.qmd
+    - part: part-grid_dynamics.qmd
+      chapters:
+        - Chapt-05-TIP_indices.qmd
+        - Chapt-06-EstimateTotalFishableArea.qmd
+        - Chapt-07-grid_turnover.qmd
+
+    - part: part-implications.qmd
+      chapters:
+        - Chapt-08-whatdoesitallmean.qmd
+        - Chapt-09-ExtendAdopt.qmd
+
+    - part: part-appendix.qmd
+      chapters:
+        - Chapt-10-researchers.qmd
+        - Chapt-11-intellprop.qmd
+        - Chapt-12-references.qmd
+        - Chapt-13-fis-cpue.qmd
+        - Chapt-14-Climate_Part_1_Pictures.qmd
+        - Chapt-15-Climate_Part_2_Standardisation.qmd
+        - Chapt-16-Climate_Part_3_Some_Results.qmd
+
+format:
+  docx:
+    documentclass: scrreport
+    classoption:
+      - numbers=noenddot
+    crossref:
+      chapters: true
+    highlight-style: github
+    papersize: A4
+    code-overflow: "wrap"
+    reference-doc: word-styles-reference-01.docx
+    lof: true
+    lot: true
+    toc: true
+    number-sections: true
+    toc-depth: 4
+    number-depth: 4
+    margin-left: 0.75in
+    margin-right: 0.75in
+    margin-top: 1in
+    margin-bottom: 1in
+    fig-format: png
+    fig-dpi: 600
+
+  pdf:
+    documentclass: scrreport
+    classoption:
+      - numbers=noenddot
+    keep-tex:  true
+    latex-auto-install: true
+    dpi: 600
+    #pdf-engine: xelatex
+    language:
+      label:
+      fig: !expr function(x) sprintf("**Figure %s.** ", x)
+    lof: true
+    lot: true
+    toc: true
+    toc-depth: 4
+    toc_float: true
+    number-depth: 4
+    number-sections: true
+    crossref:
+      chapters: true
+    highlight-style: github
+    papersize: "A4paper"
+    linestretch: 1.25
+    mainfont: Calibri
+    geometry:
+      - left = 20mm
+      - right = 20mm
+      - top = 20mm
+      - bottom = 20mm
+      - heightrounded
+
+    template-partials:
+      #- Latex/before-title.tex
+      - Latex/title.tex
+    include-before-body: Latex/before_body.tex
+    include-in-header:
+      text: |
+        \usepackage[noblocks]{authblk}
+        \renewcommand*{\Authsep}{, }
+        \renewcommand*{\Authand}{, }
+        \renewcommand*{\Authands}{, }
+        \renewcommand\Affilfont{\small}
+        \usepackage{tocbibind}
+        \titlehead{\includegraphics[width=15cm]{media/corp_logos.jpg}}
+
+        
+
+# \titlehead{\includegraphics[width=15cm]{media/corp_logos.jpg}}
+
+  # titlepage-pdf:
+  #   documentclass: scrbook
+  #   classoption:
+  #     - numbers=noenddot
+  #   latex-auto-install: true
+  #   dpi: 600
+  #   #pdf-engine: xelatex
+  #   language:
+  #     label:
+  #     fig: !expr function(x) sprintf("**Figure %s.** ", x)
+  #   lof: true
+  #   lot: true
+  #   toc: true
+  #   toc-depth: 4
+  #   toc_float: true
+  #   number-depth: 4
+  #   number-sections: true
+  #   crossref:
+  #     chapters: true
+  #   highlight-style: github
+  #   papersize: "A4paper"
+  #   linestretch: 1.25
+  #   mainfont: Calibri
+  #   geometry:
+  #     - left = 20mm
+  #     - right = 20mm
+  #     - top = 20mm
+  #     - bottom = 20mm
+  #     - heightrounded
+  #   titlepage: "bg-image"
+  #   titlepage-logo: "mytitlepage/img/corp_logos.jpg"
+  #   titlepage-bg-image: "mytitlepage/img/corner-bg.png"
+  #   titlepage-header: "The Publisher"
+  #   titlepage-geometry: ["top=1in", "bottom=1in", "right=1in", "left=1in"]
+  #   titlepage-theme:
+  #     elements: ["\\titleblock", "\\authorblock", "\\affiliationblock",  "\\logoblock", "\\vfill"]
+  #     page-align: "left"
+  #     title-style: "plain"
+  #     title-fontstyle: ["large", "bfseries"]
+  #     title-space-after: "4\\baselineskip"
+  #     subtitle-fontstyle: ["large", "textit"]
+  #     author-style: "superscript-with-and"
+  #     author-fontstyle: "large"
+  #     affiliation-style: "numbered-list-with-correspondence"
+  #     affiliation-fontstyle: "large"
+  #     affiliation-space-after: "0pt"
+  #     logo-space-after: "2\\baselineskip"
+  #     vrule-width: "1pt"
+  #     bg-image-size: "0.5\\paperwidth"
+  #     bg-image-location: "ULCorner"
+  #   
+  #   coverpage: true
+  #   #coverpage-bg-image: "_extensions/nmfs-opensci/titlepage/images/TheGreatWaveoffKanagawa.jpeg"
+  #   coverpage-bg-image: "mytitlepage/img/hossy_figs.png"
+  #   coverpage-title: "Can spatial fishery-dependent data be used to determine stock status in a spatially structured fishery?"
+  #   coverpage-footer: "FRDC Final Report Project 2017-026"
+  #   coverpage-theme:
+  #     title-style: "plain"
+  #     title-fontfamily: "Arial"
+  #     title-fontsize: 20
+  #     title-align: left
+  #     title-location-top: "0.75\\paperheight"
+  #     title-location-left: 1in
+  # 
+  #   coverpage-include-file:
+  #     - mytitlepage/tex/copyright.tex
+  #   titlepage-include-file:
+  #     - mytitlepage/tex/dedication.tex
+  #   include-before-body: Latex/before_body.tex
+  #   keep-tex: true
+  #   include-in-header:
+  #     text: |
+  #       % delete. this is for the example w CZ diacritics
+  #       \usepackage{babel}
+  #       \babelprovide[import]{czech}
+  #       \usepackage[noblocks]{authblk}
+  #       \renewcommand*{\Authsep}{, }
+  #       \renewcommand*{\Authand}{, }
+  #       \renewcommand*{\Authands}{, }
+  #       \renewcommand\Affilfont{\small}
+  #       \usepackage{tocbibind}
+        
+bibliography: references.bib
+link-citations: true
+
+# Note - can render to latex and then use Overleaf for all the final edits  
+
+
+# quarto install template nmfs-opensci/quarto_titlepages
+#     

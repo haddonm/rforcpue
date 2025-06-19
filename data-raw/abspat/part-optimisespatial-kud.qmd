@@ -1,0 +1,3 @@
+# Optimising use of spatial dive event data {#sec-spatial .unnumbered}
+
+This section of the report is focused on identifying a base catch rate standardisation model, advantages of pursing different scales of aggregation, and finally on characterising and describing spatial performance measures derived from bivariate kernel utilisation distribution polygons of individual fishing events (KUD). Here we directly explore the potential to replace time as a unit of effort with dive polygon area. 

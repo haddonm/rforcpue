@@ -1,0 +1,572 @@
+# Climate Data Part 2: Standardisation {#sec-chapter15}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "", out.width = "90%",
+                      fig.align = "center")
+options(knitr.kable.NA = '*',
+        stringsAsFactors = FALSE)
+
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(lattice)
+library(splines)
+library(visreg)
+library(lme4)
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5)))
+ 
+if(!grepl("Bill", Sys.info()["user"])) {
+  if(Sys.info()[4] == "DESKTOP-NRMCG9M") {
+    datadir <- "D:/Dropbox/AbaloneData/"
+    abCEbl <- readRDS("D:/Dropbox/AbaloneData/Climate_logbook_bl_2023_03_07.RDS")
+  } else { 
+    datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+    abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+  }
+} else {
+  ###
+  ### Bill's setup is different...
+  ###
+  si <- Sys.info()
+  if(si["sysname"] == "Windows") {
+    ## my dropbox is on D:
+    datadir <-  "D:/Users/Bill/Dropbox/AbaloneData/"
+  } else {
+    ## Linux
+    datadir <- "~/Dropbox/AbaloneData"
+  }
+  abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS"))
+}
+
+
+abCEbldiver_ex_blckday <- abCEbl$diver_ex
+abCEbl$diver_ex <- NULL
+
+
+##
+## Bill's version
+## Note this only creates an index of total years fishing, any zone, any block
+vars <- abCEbl %>%
+  ungroup() %>%
+  select(plaindate, diver_id) %>%
+  unique() %>%
+  within({
+    diver_year <- as.POSIXlt(plaindate)$year + 1900
+    diver_ex <- ave(diver_year, diver_id, 
+    # FUN = function(x) x - min(x, na.rm = TRUE)) #### original function
+      FUN = function(x) cumsum(!duplicated(x)) - 1) #### changed  function 
+  })
+BLdat <- left_join(abCEbl, vars, by = c("plaindate", "diver_id")) %>%
+  data.frame()
+
+
+##
+## Craig's within() version - probably shouldn't use this form of diver
+## Note: this  creates of days fished in a given block
+## Note: returns the full length dataframe - no need to join with abCEbl.
+BLdat <- BLdat %>%
+  ungroup() %>%
+  within({number <- 1}) %>%
+  #dplyr::select(plaindate, diver_id, blockno, number) %>%
+  arrange(diver_id, blockno, plaindate) %>%
+  within({diver_ex2 <- ave(number, diver_id, blockno,  FUN=cumsum)})
+
+BLdat <- BLdat            %>%                       # start with this
+  subset(fishyear > 1991) %>%                       # remove any old data
+  droplevels()            %>%                       # remove unused fishers
+  rename(zone = newzone,
+         logCPUE = LnCE)  %>%                       # new name for an old variable              
+  within({
+    diver_id <- factor(diver_id)
+    year <- factor(fishyear)
+    month <- factor(month.abb[fishmonth], levels = month.abb)
+    block <- factor(substring(100 + blockno, 2))
+    two_divers <- 0 + (numdivers == 2)  # binary to allow for 2-diver events
+    hours <- pmax(1/12, pmin(hours,24)) # CMD: logically there shouldn't be zero or >24 hours 
+                                        # cpue's given daily logs- CHECK! Note 0 hours values have
+                                        # real logCPUE values which dont make sense!!
+    logCPUE <- pmax(-2.5, pmin(logCPUE, 8.5))   # put a guard on logCPUE to stop later crashing
+    zone <- factor(zone, levels = c("BS", "N", "W", "E"))
+    is.na(wave_hght[!is.na(wave_hght) & wave_hght == 0]) <- TRUE
+    is.na(wave_power[!is.na(wave_power) & wave_power == 0]) <- TRUE
+    sst <- C
+  })                      %>% 
+  select(diver_id, diver_ex, year, month, plaindate, zone, block,two_divers, propblip, 
+         catch, totalcatch, hours, cpue, logCPUE, wave_hght, wave_power, wave_dir, wave_mode, wind_speed, wind_dir, wind_mode, sst) %>% 
+  data.frame(stringsAsFactors = FALSE)      
+
+cpoints <- setNames(seq(0, by = 22.5, length.out = 16),
+                    c("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"))
+BLdat <- BLdat %>% 
+  within({
+    wave_mode <- sub("NWN", "NNW", as.character(wave_mode))
+    wind_mode <- sub("NWN", "NNW", as.character(wind_mode))
+   # compass <- cpoints[direction]
+   # direction <- factor(direction, levels = names(cpoints))
+  })
+rm(rdata, vars)
+```
+
+## Preamble
+
+This is Part 2 of our exploration of how the climate data may be useful in enhancing
+the standardisation of Blacklip Abalone.  Part 1 was mainly concerned with visualising
+and exploring the climate data itself.
+
+The data we use is the same as the extended version produced and used in Part 1.
+
+```{r, echo=FALSE}
+oldOpt <- options(knitr.kable.NA = "  ")
+z <- sapply(BLdat, class)
+m <- colSums(is.na(BLdat))
+zz <- data.frame(Variable = names(z), class = as.vector(z), missing = as.vector(m))
+cbind(zz[1:10, ], ` ` = NA, zz[11:20, ]) %>% kable()
+options(oldOpt)
+```
+
+\pagebreak
+## Standardisation models
+
+### Fixed or random?
+
+In previous notes we used the following model to build an integrated standardisation
+over the fishery.
+
+```{r model_fit}
+mod_1 <- lmer(logCPUE ~ I(propblip-1) + two_divers + (1|year) + (1|month) +
+                (1|diver_id) + (1|block) + (1|block:year) +  (1|block:year:month),
+              control = lmerControl(optimizer = "bobyqa"),
+              data = BLdat)
+```
+
+This has `year` and `month` as random main effects, with random interactions
+involving them as well.  It is interesting to see how different the estimates
+of these effects are when the main effects for `block`, `year` and `month` are changed to
+fixed effects, but leaving the interactions involving them as random.  This is
+done in the following model fit:
+
+```{r model_fit_fe}
+mod_1_fe <- lmer(logCPUE ~ I(propblip-1) + two_divers + year + month +
+                (1|diver_id) + block + (1|block:year) +  (1|block:year:month),
+              control = lmerControl(optimizer = "bobyqa"),
+              data = BLdat)
+```
+
+Now we compare the corresponding fixed and random estimates,
+first for `month`:^[ In these comparisons the fixed effects are standardised so that, like the random effects, they have mean zero.]
+
+
+```{r month, fig.height=5.5, fig.width=10, out.width="60%", echo=FALSE}
+re <- ranef(mod_1)$month[["(Intercept)"]]
+b <- fixef(mod_1_fe)
+fe <- scale(c(0, b[grep("^month", names(b))]), scale = FALSE)
+tmp <- data.frame(month = factor(month.abb, levels = month.abb),
+                  random = re, fixed = as.vector(fe)) %>% 
+  pivot_longer(-month)
+ggplot(tmp) + aes(x = month, y = value, colour = name, group = name) +
+  geom_point() + geom_line() + scale_colour_brewer(palette = "Set1")
+
+``` 
+
+The difference is barely perceptible.  Now for the `year` effect:
+
+```{r year, fig.height=5.5, fig.width=10, out.width="60%", echo=FALSE}
+re <- ranef(mod_1)$year[["(Intercept)"]]
+b <- fixef(mod_1_fe)
+fe <- scale(c(0, b[grep("^year", names(b))]), scale = FALSE)
+tmp <- data.frame(year = factor(1991 + seq_along(re)),
+                  random = re, fixed = as.vector(fe)) %>% 
+  pivot_longer(-year)
+ggplot(tmp) + aes(x = year, y = value, colour = name, group = name) +
+  geom_point() + geom_line() + scale_colour_brewer(palette = "Set1") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
+```
+
+Here the shrinkage is more obvious, but the only year in which it is
+appreciable is `2023` and around the `2017` years.
+
+Finally we look at the comparison with respect to the `block` main effect.  Here
+there is little shrinkage except for a few blocks.
+
+```{r block, fig.height=5.5, fig.width=12, out.width="75%", echo=FALSE}
+re <- ranef(mod_1)$block[["(Intercept)"]]
+b <- fixef(mod_1_fe)
+fe <- scale(c(0, b[grep("^block", names(b))]), scale = FALSE)
+tmp2 <- data.frame(block = factor(levels(BLdat$block)),
+                   random = re, fixed = as.vector(fe)) %>% 
+  pivot_longer(-block)
+ggplot(tmp2) + aes(x = block, y = value, colour = name, group = name) +
+  geom_point() + geom_line() + scale_colour_brewer(palette = "Set1")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
+
+```
+
+These comparisons do not argue in favour of using fixed effect terms _per se_, because
+the `diver_id` term and the _interaction_ terms are still modelled as random.
+There is no logical or inferential
+problem with this, but it is still the case that the terms with the really large numbers
+of parameters are modelled as random, and these terms play a big part in ensuring the
+robustness, in a technical sense, of the models in standardisation.
+
+If it were possible to fit a fully fixed effect model, (which seems doubtful,
+one of the reasons a block by block analysis may have been used elsewhere),
+there is no doubt that a model that includes interactions and diver terms could display 
+substantial examples of useful shrinkage occurring.
+
+### Is catch proportional to dive hours?
+
+Before leaving this model we look at the question of whether the primary
+underlying assumption, namely that, other things being equal,
+$$
+C \propto H
+$$
+where $C$ is catch and $H$ the dive hours spent by the diver(s) to make
+that catch.
+
+In the context of the present model, this assumption can be checked by
+including `log(hours)` as a fixed effect predictor in the model.  If the
+above proportional relationship applies, the coefficient of this term
+should be $\approx 0$; any substantial deviation would indicate that
+the proportional relationship assumption is not credible, (or the model itself
+is inadequate).
+
+```{r cpue}
+mod_1a <- lmer(logCPUE ~ log(hours) + I(propblip-1) + two_divers + (1|year) + (1|month) +
+                 (1|diver_id) + (1|block) + (1|block:year) +  (1|block:year:month),
+               control = lmerControl(optimizer = "bobyqa"),
+               data = BLdat)
+```
+
+The fixed effect terms have estimates as shown in the following:
+```{r coef, echo=FALSE}
+b <- fixef(mod_1a)
+blogh <- as.vector(b["log(hours)"])
+btwod <- as.vector(b["two_divers"])
+summary(mod_1a)$coefficients %>% kable(digits = 4)
+```
+
+The  coefficient of `log(hours)`, $\beta = `r round(blogh, 4)`$, 
+is small,^[ The high significance is simply due to the very large sample size.]
+indicating
+that nominal effort might be better measured in an attenuated version of hours, namely
+$$
+C \propto H^{1+\beta} \quad \mbox{where}\quad 1+\beta = 1 + (`r round(blogh, 4)`)
+= `r 1 + round(blogh, 4)`
+$$
+This initially slightly shocking suggestion could be explained by the possibility
+that as dive times in the same area increase they become progressively less productive of catch.
+
+Note that in Part 1 of these notes, in the figure showing the marginal relationship of
+`log(catch)` with `log(hours)` per `block`, the green local regression lines had slopes
+_generally slightly less_ than the red guide line with slope 1.  This is in line with
+the current finding.
+
+Note also that the presence of two divers rather than one also slightly decreases
+the expected catch, but this time proportionally by the multiplier
+$\exp(`r round(btwod, 4)`) = `r round(exp(btwod), 4)`$.  This may have a similar
+explanation: doubling the number of divers in one location may not be as productive
+as having each in a different location.
+
+#### Minor model enhancements
+
+Looking at the partial residuals shows an interesting pattern with respect to `propblip`:
+
+```{r vis, fig.height=7, fig.width=10, out.width="60%", echo=FALSE}
+visreg(mod_1, xvar = "propblip", data = BLdat)
+```
+
+Observations with `propblip` < 1 are few, so the need to accommodate this
+feature is not strong.  We can go some way to doing this, however, by using
+a polynomial term in a transformed `propblip` variable, as follows:
+
+```{r mod2}
+mod_2 <- lmer(logCPUE ~ poly(asin(sqrt(1-propblip)), 4) + two_divers + (1|year) + (1|month) +
+                (1|diver_id) + (1|block) + (1|block:year) +  (1|block:year:month),
+              control = lmerControl(optimizer = "bobyqa"),
+              data = BLdat)
+```
+
+The partial plot of the term now looks like this:
+```{r vis2, fig.height=7, fig.width=10, out.width="60%", echo=FALSE}
+visreg(mod_2, xvar = "propblip", data = BLdat)
+```
+
+where the peculiar pattern now appears to be captured.
+
+Previous investigations suggested that `diver_ex` (diver experience, in years) was
+not a very influential predictor.  It is nevertheless interesting to see how this
+variable influences `logCPUE` in a conditional, rather than a marginal setting.  To
+do this we add a flexible term in `diver_ex` to the model and look at its contribution
+to the model.
+
+```{r dex}
+mod_2 <- update(mod_2, . ~ . + ns(diver_ex, 3))
+vdex <- visreg(mod_2, "diver_ex", data = BLdat, plot = FALSE) ## for model inspection
+```
+
+We now look at the contribution to the model, with and without the partial residuals.
+
+```{r dex2, echo=FALSE, fig.height=6, fig.width=14, out.width="100%"}
+par(mfrow = c(1,2))
+plot(vdex, partial = TRUE)
+plot(vdex, partial = FALSE)
+```
+
+The figure on the left suggests, correctly, that the contribution is minuscule.  Expanding
+the diagram as in the figure on the right suggests that the contribution is continuously increasing but that increase in experience is most dramatic in the first few years.
+
+We will use `mod_2` as the starting point for extensions involving the environmental
+variables, to which we next turn.
+
+## Environmental predictors of catch
+
+We now turn to assessing the extent to which adding weather and environmental
+predictors can be useful in standardisation models such as the one above.
+
+### Sea surface temperature
+
+Sea surface temperature, `sst`, is the only environmental variable with no missing values.
+As there is a large number of
+missing values in the other environmental predictors, (wave height, power and
+direction) we consider the case of `sst` separately first, using
+the complete data set.
+
+Previous marginal views in Part 1 suggested that `sst` was unlikely to be very influential
+as a predictor.  We now look formally at this using the modelling approach, and hence
+conditionally rather than marginally.  We again consider a flexible term, for exploratory
+purposes
+
+```{r sst}
+mod_2_sst <- update(mod_2, . ~ . + ns(sst, 3))
+vsst <- visreg(mod_2_sst, "sst", data = BLdat, plot = FALSE) ## for model inspection
+```
+
+Looking at the contribution to the model, again with and without partial residuals,
+gives the following:
+
+```{r sst2, echo=FALSE, fig.height=6, fig.width=14, out.width="100%"}
+par(mfrow = c(1,2))
+plot(vsst, partial = TRUE)
+plot(vsst, partial = FALSE)
+```
+
+The left hand diagram reinforces the view that the contribution to the model is
+again essentially negligible.  The expanded diagram on the right suggests a
+general increase in catch with increase in `sst` with a maximum possible gain in catch
+rate of $\sim 25$% over the observed range, but hardly, if ever, achieved.
+
+We conclude that `sst` does not make a useful contribution and omit it from the
+exploratory study to follow.
+
+### Wave height, power and wind direction
+
+At this point we need to use a reduced data set with the cases where these three
+environmental variables are missing excluded.  
+
+```{r data2}
+BLdat_clean <- BLdat %>% 
+  filter(complete.cases(wave_hght, wave_power, wave_dir, wave_mode)) %>% 
+  droplevels()
+```
+
+Turning first to wave direction, (a factor), it seems reasonable to consider this
+variable in relation to `zone`, though note that not all directions were observed
+in every zone.  Here is a table of observed frequencies:
+
+```{r echo=FALSE}
+with(BLdat_clean, table(zone, wave_mode)) %>% kable()
+```
+
+The exploratory model is fitted as follows:
+
+```{r wave_mode, message=FALSE}
+mod_2_wave_mode <- update(mod_2, . ~ . + zone/wave_mode, data = BLdat_clean)
+vdir <- visreg(mod_2_wave_mode, "wave_mode", by = "zone", data = BLdat_clean, plot = FALSE)
+```
+
+Visualisation of the contributions now has to be conditional on `zone`.
+The plot below shows the partial residuals as well as the size of the effect.
+Note that the partial residuals have been clipped to remove the more extreme outliers:
+
+```{r dirction2, fig.height=8, fig.width=8, out.width="100%", echo=FALSE}
+# fig-height: 1.5
+# fig-width: 4
+plot(vdir, partial = TRUE, as.table = TRUE, col="brown", layout = c(2,2),
+     ylim = c(2.5, 6)) ### cut out some of the wilder partial residuals
+
+```
+
+With the partial residuals removed entirely, some variability both within and between zones is
+evident, though again the size of the effect is essentially negligible:
+
+<!-- ```{r wave_mode3, fig.height=8, fig.width=8, out.width="100%", echo=FALSE} -->
+<!-- # #| fig-height: 1.5 -->
+<!-- # #| fig-width: 4 -->
+<!-- # plot(vdir, partial = FALSE, as.table = TRUE, col="brown", layout = c(4,1)) -->
+<!-- plot(vdir, partial = FALSE, as.table = TRUE, col="brown", layout = c(2,2), -->
+<!--      ylim = c(2.5, 7.5)) -->
+<!-- ``` -->
+
+The major differences between the four panels are due to the `zone` main effect,
+which in the working assessment model is a component of the `block` main random effect.
+Within zones the difference in `logCPUE` between compass directions, that is, the
+`zone:wave_mode` interaction, is tiny.
+
+The case for including a `wave_mode` term of any kind in the assessment model
+seems weak at best.  We will not include it further here.
+
+Turning to wave height and power, there are two issues with these predictors
+that need to be addressed before their predictive usefulness can be assessed.
+
+- They are, as we have noted, highly correlated and
+- There are two observations in the record which have very high leverage
+  for both variables.
+  
+The two observations in question for high leverage are the following:
+
+```{r lev, echo=FALSE}
+BLdat_clean %>% 
+  filter(wave_hght > 7) %>% 
+  select(diver_id, plaindate, zone, block, propblip,
+         catch, hours, wave_hght, wave_power, wave_mode, sst,logCPUE) %>% 
+  kable(digits = 2)
+
+```
+
+These are for the same diver, in the same area, on successive days.  For
+comparison, all other values for `wave_hght` are less than $6.7$ and all
+other values of `wave_power` are less than $330$.
+
+The `log(CPUE)` values for these two observations are $\approx 4.9$, which
+is high for the zone but not excessively so.  Nevertheless with either of these
+two predictors in the model, these observations will be given very high
+leverage and my skew the importance of the variable(s).
+
+For exploratory purposes here we will temporarily cut back these values to $6.6$ for
+`wave_hght` and $330$ for `wave_power`.  This is simply to gain a better view
+of the potential usefulness of the variables in any future analysis, _even
+if these values prove to be genuine_.  (Such a move is called 'Winsorisation'
+in statistics.  Any future analysis could compare results with and without
+Winsorisation.)
+
+With the range contracted, it now becomes clear from the diagram that the highest
+wave height and power records are in the West and East zones. Colours are different blocks.
+
+```{r winsor, fig.height = 3.5, fig.width = 14, out.width = "100%", echo=FALSE}
+BLdat_clean <- BLdat_clean %>% 
+  within({
+    wave_hght <- pmin(6.6, wave_hght)
+    wave_power <- pmin(330, wave_power)
+  })
+ggplot(BLdat_clean) +
+  aes(x = wave_hght, y = wave_power, colour = block) + geom_point(size = 0.75) +
+  facet_wrap(~ zone, nrow = 1) + theme(legend.position = "none")
+```
+
+Given the tight curvilinear relationship between `wave_power` and `wave_hght` it is
+unlikely there will be much to choose between including them in the standardisation
+model, and no benefit to gain in choosing both together.  Hence we look at their
+possible contributions separately.
+
+First look at wave height:
+
+```{r waveheight}
+mod_2_wvh <- update(mod_2, . ~ . + ns(wave_hght, 3), data = BLdat_clean)
+vish <- visreg(mod_2_wvh, "wave_hght", data = BLdat_clean, plot = FALSE) ## for model inspection
+```
+
+The contribution to the model due to this additional cubic polynomial term,
+first with partial residuals and then without, leads to the following:
+
+```{r wvh2, echo=FALSE, fig.height=6, fig.width=14, out.width="100%"}
+par(mfrow = c(1,2))
+plot(vish, partial = TRUE)
+plot(vish, partial = FALSE)
+```
+
+Significance is a poor guide again, here.  Instead the range and shape of
+the partial contribution is more informative.  The shape appears somewhat
+curious with an initial decrease, followed by a leveling out.  In any case the
+range of the component is again very small, though marginally larger than,
+for example, that of `sst` as shown previously.
+
+Turning to wave power, we fit the same kind of model:
+
+```{r wavepoert}
+mod_2_wvp <- update(mod_2, . ~ . + ns(wave_power, 3), data = BLdat_clean)
+visp <- visreg(mod_2_wvp, "wave_power", data = BLdat_clean, plot = FALSE) ## for model inspection
+```
+
+The contribution to the model, in the same form, is shown below:
+
+```{r wvp2, echo=FALSE, fig.height=6, fig.width=14, out.width="100%"}
+par(mfrow = c(1,2))
+plot(visp, partial = TRUE)
+plot(visp, partial = FALSE)
+```
+
+
+In this case there is a pronounced final upswing, but the range
+of the component is again tiny, and much the same as it was for
+wave height.  The difference in shapes between the two components
+may be explained, in part, by the curved nature of the tight
+connection between the predictors themselves, as noted several times.
+In any case, both model lead to very similar fitted values, which
+we can show in a simple plot:
+
+```{r fit, fig.height=6, fig.width=6, fig.align="center", out.width="40%", echo=FALSE}
+par(pty = "s")
+fvh <- fitted(mod_2_wvh)
+fvp <- fitted(mod_2_wvp)
+plot(fvh, fvp, pch = ".", cex = 1.5, col = "cadetblue", panel.first = grid(),
+     xlab = "Wave height (fitted values)", ylab = "Wave power (fitted values)",
+     xlim = range(fvh, fvp), ylim = range(fvh, fvp))
+```
+
+This further emphasises that either wave height or wave power can function as
+an effective surrogate for the other.
+
+## Final comments
+
+### Environmental variables
+
+In this modelling approach we have tried to gain some insight on the question of
+whether or not environmental variables are likely to be useful in catch rate
+standardisation.  The clear answer is that there is little if anything to gain
+by including them.  Although this conclusion has been reached using a particular
+modelling strategy for standardisation, we strongly suspect the same outcome
+will apply whatever method is used.
+
+The most likely reason why environmental variables cannot be shown to be important
+in this context is the observational nature of the data itself: rather than data
+from a designed, balanced experiment with randomization and controls,
+we only have realised data from the fishery in action, where the goal is to
+maximise outcomes, not to test the effect of the environmental variables.  Decisions
+when and where to fish are made taking account of environmental conditions and
+presumably carefully optimising with respect to them.  This leads to inevitable
+confounding when trying to tease out the subtle effects of variable environmental
+conditions: the variation is strongly curtailed.
+
+### Side issues
+
+We also covered two side issues that may be of some interest.
+
+The first of these was the intriguing possibility that some attenuated version of
+`hours` fished might offer a better basis for (nominal) effort.  Specifically a
+power such as $H^{0.9}$ might be a better measure of effective effort, particularly
+for the very long episodes of daily fishing time per diver.  We leave this without
+further comment.
+
+The second side issue was a simple demonstration that the choice between fixed and
+random _main_ effects may not be crucial in practice.  We showed this for the case
+of `month`, `year` and `block` main effects only.  Where it is likely to be
+important, however, is where you have large numbers of effects, as in the case of
+`diver_id`, and where the information basis is patchy at best, as in the case
+of interactions between `block`, 'year` and `month` in our model.  In these latter
+cases the integrative power of random effect models becomes crucial, avoiding
+the parameter explosion and resulting instability of their fixed effect
+counterparts.  This issue could be further explored, but it would not be a brief
+or simple exercise to do well.  There are strong theoretical reasons behind the
+choice of random effects in these circumstances, however.
+

@@ -1,0 +1,17 @@
+# Extension and Adoption {#sec-Extension .unnumbered}
+
+It is expected that there will be general interest in the approaches used in this study, and the findings in each of the sections. The capacity for other groups or fisheries to utilise the work presented here will be limited to those fisheries a time-series of geo-referenced fishery-dependent data. Some of the methods for exploring spatio-temporal dynamics may be of use to fisheries with access to VMS data, where fishing activity is summarised with a similar grid over the known fishing grounds.
+
+## Extension
+Outcomes of this project have been presented in multiple research, management and industry forums. The work on hyperstable catch rates and the effect of environmental variables (temperature and wave power) was presented at the 11th International Abalone Symposium in Auckland March 2023. The concept of switching from a time-based effort (CPUE) to area-based effort (CPUA) for calculating catch rates has been presented to Tasmanian port meetings, and feedback sought on whether CPUA better reflects their experiences in parts of the fishery they know well. The importance of scale work was presented at the recent Australasian Abalone mini-Research Symposium held in Hobart September 2024.  
+
+The new approach to standardisation and the inclusion of Catch per Unit Area (CPUA) in the Harvest Strategy has been added to the drat Revised Tasmanian Abalone harvest Strategy. The revised Harvest Strategy document is currently undergoing a mandatory public consultation process.  Code developed for the hyperstability component has been provided to SARDI and used to examine hyperstability in some of there jurisdictions that have access to geo-referenced fishery dependent data.
+
+## Adoption
+### Inclusion of spatial information in fishery assessments
+The use of CPUA as a index of abundance has been proposed for inclusion as part of the standard metrics for assessment in the draft Revised Abalone Harvest Strategy. It is expected that this change will be approved following the mandatory consultation process currently under way.
+
+
+### Strategy for catch and effort standardisation
+
+Within this project we explored generic approaches for statistical standardisation of catch and effort data, regardless of whether the data origins where electronic from data logger equipment or fisher reported docketbook returns. This generic model has also been proposed as a replacement for the current standardisation strategy in the draft Revised Harvest Strategy document. As for the inclusion of spatial metrics, it is expected this will also be approved following the consultation process. 

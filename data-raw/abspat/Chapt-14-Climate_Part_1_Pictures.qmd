@@ -1,0 +1,487 @@
+
+# Climate Data Part 1: Climate plots {#sec-chapter14}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warnings=FALSE,comment = "", out.width = "90%",
+                      fig.align = "center")
+options(knitr.kable.NA = '*',
+        stringsAsFactors = FALSE)
+
+library(tidyverse)
+library(knitr)
+library(lattice)
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5)))
+
+#datadir <-  sprintf("C:/Users/%s/Dropbox/AbaloneData/", Sys.info()[["user"]])
+
+if(Sys.info()[4] == "DESKTOP-NRMCG9M") {
+    datadir <- "D:/Dropbox/AbaloneData/"
+} else { 
+    datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+}
+
+###
+### Bill's setup is different...
+###
+si <- Sys.info()
+if(grepl("Bill", si["user"])) {  ## sometimes "Bill"; sommetimes "Bill Venables"
+  if(si["sysname"] == "Windows") {
+    ## my dropbox is on D:
+    datadir <-  "D:/Users/Bill/Dropbox/AbaloneData/"
+  } else {
+    ## Linux
+    datadir <- "~/Dropbox/AbaloneData"
+  }
+}
+```
+
+## Data loading and preparation
+
+The data set used in this Part was as at the 2023-03-22. It only looks
+at Blacklip (BL) data. The aim of this Part is to simply investigate and
+display the data with a particular focus on the environmental data and
+how they relate to catch and each other.
+
+```{r ReadData, echo=FALSE}
+# load(file.path(datadir, "LogbookWithEnvironmentData_2022_06_22.RData"))
+
+# abCEbl <- readRDS(sprintf("C:/Users/%s/Dropbox/AbaloneData/Climate_logbook_bl_2023_03_07.RDS",
+#                           Sys.info()[["user"]]))
+
+abCEbl <- readRDS(file.path(datadir, "Climate_logbook_bl_2023_03_07.RDS")) ## works for everyone!
+
+## Logbook data - Most recent
+abCEbldiver_ex_blckday <- abCEbl$diver_ex
+abCEbl$diver_ex <- NULL
+
+```
+
+### Data names and structure
+
+Some of the variable names in the loaded data set are as follows:
+
+```{r complexion, results="hold", echo=FALSE}
+oldOpt <- options(knitr.kable.NA = " | ")
+cat("\nn = ", nrow(abCEbl), ", p = ", ncol(abCEbl), "\n", sep = "")
+z <- sapply(abCEbl, function(x) class(x)[1]) %>% cbind()
+z <- cbind(Variable = rownames(z), class = as.vector(z))
+kable(cbind(z[1:12, ], ` ` = NA, z[13:24, ], ` ` = NA, z[c(27:36,41,42),]))
+options(oldOpt)
+```
+
+From this we have a few climate variables as continuous variables such
+as:
+
+-   `wave_hght`: wave height per day,
+-   `wave_power`: wave power per day,
+-   `wave_dir`: wave direction,
+-   `C`: sea surface temperature (which we will rename to `sst` later).
+
+As factors:
+
+-   `wind_mode`: a character vector of direction so we may need
+    something more numeric value later. There is an equivalent for wave
+    mode.
+
+Also to relate the logbook data with each other, such as:
+
+-   `totalcatch`: the catch of BL and GL abalone
+-   `catch`: catch of BL
+-   `hours`: the hours taken to catch this
+-   `rawblhours`: raw BL hours
+-   `asjblhours`: adjusted BL hours (many NAs!!)
+-   `cpue`: catch/hours
+-   `LnCe`: log(cpue)
+-   `propblip`: proportion of Blacklip in the total catch
+
+### Missing value composition
+
+A quick check on the variables which have missing values (NAs) in them,
+and how many NAs each has, is as follows:
+
+```{r}
+miss <- abCEbl %>% is.na() %>% colSums() %>% .[. > 0]
+cbind(NAs = miss, `%` = round(100*miss/nrow(abCEbl), 2)) %>% kable()
+```
+
+### Data processing and convenience extensions
+
+It is convenient to work with a working data set, leaving the initial
+loaded data intact.
+
+The first extension is to add a `diver_ex` variable that gives a rough
+measure of the experience each diver has, in years, at that point of the
+data record.
+
+```{r Manipulate, eval=TRUE}
+vars <- abCEbl %>% 
+  ungroup() %>% 
+  select(plaindate, diver_id) %>% 
+  unique() %>% 
+  arrange(diver_id, plaindate) %>% 
+  within({
+    diver_year <- as.POSIXlt(plaindate)$year + 1900
+    # diver_ex <- ave(diver_year, diver_id, FUN = function(x) x - min(x, na.rm = TRUE)) 
+    # # this code has a bug if someone takes a gap year or more
+    diver_ex <- ave(diver_year, diver_id, 
+                    FUN = function(x) (cumsum(!duplicated(x)) - 1)) 
+  }) 
+BLdat <- left_join(abCEbl, vars, by = c("plaindate", "diver_id")) %>% data.frame()
+```
+
+<!-- Another way of calculating diver experience: -->
+
+<!-- ```{r Manipulate2} -->
+<!-- abCEbl$diverYear = paste(abCEbl$diver_id, abCEbl$fishyear, sep="_") -->
+
+<!-- unique.divers = unique(abCEbl$diver_id) -->
+
+<!-- for(i in 1:length(unique.divers)){ -->
+<!--   diver.max.years = length(unique(subset(abCEbl, diver_id==unique.divers[i])$fishyear)) -->
+<!--   times = as.data.frame(table(subset(abCEbl, diver_id==unique.divers[i])$fishyear)) -->
+<!--   diver.ex = rep(1:diver.max.years, times=times[,"Freq"]) -->
+
+<!--   diver.ex.temp = data.frame(diver_id=unique.divers[i],  -->
+<!--                            diver_ex = diver.ex,  -->
+<!--                            diverYear = subset(abCEbl, -->
+<!--                                               diver_id==unique.divers[i])$diverYear) -->
+<!-- if(i==1) diver.ex.all = diver.ex.temp else diver.ex.all = rbind(diver.ex.all, diver.ex.temp) -->
+<!-- } -->
+
+<!-- diver.ex.all = diver.ex.all[!duplicated(diver.ex.all),] -->
+<!-- BLdat = merge(abCEbl, diver.ex.all, by=c('diverYear',"diver_id")) -->
+
+<!-- ``` -->
+
+The next step is to do various tidying up, filter from 1991 and placing
+some guards on key variables:
+
+```{r}
+BLdat <- BLdat            %>%                       # start with this
+  subset(fishyear > 1991) %>%                       # remove any old data
+  droplevels()            %>%                       # remove unused fishers
+  rename(zone = newzone,
+         logCPUE = LnCE)  %>%                       # new name for an old variable
+  within({
+    diver_id <- factor(diver_id)
+    year <- factor(fishyear)
+    month <- factor(month.abb[fishmonth], levels = month.abb)
+    block <- factor(substring(100 + blockno, 2))
+    two_divers <- 0 + (numdivers == 2)  # binary to allow for 2-diver events
+    hours <- pmax(1/12, pmin(hours,24)) # always good to check no weird hours
+    logCPUE <- pmax(-2.5, pmin(logCPUE, 8.5)) # put a guard on logCPUE to stop later crashing
+    zone <- factor(zone, levels = c("BS", "N", "W", "E"))
+    sst <- C
+  })                      %>%
+  select(diver_id, diver_ex, year, month, plaindate, zone, block,two_divers, propblip,
+         catch, totalcatch, hours, cpue, logCPUE, wave_hght, wave_power, wave_dir, wave_mode,
+         wind_speed, wind_dir, wind_sd, wind_mode, sst) %>%
+  data.frame(stringsAsFactors = FALSE)
+
+```
+
+Now we add in the numerical compass direction (compass rose) variable,
+but first note that one of the compass directions recorded in the data
+does not have the conventional acronym:
+
+```{r}
+with(BLdat, table(wave_mode, useNA = "a"))
+```
+
+The direction listed as `NWN` should presumably be `NNW`. Make this
+change speculatively and add the `compass` numerical variable.
+
+```{r}
+#cpoints <- setNames(seq(0, by = 22.5, length.out = 16),
+#                    c("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+#                      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"))
+BLdat <- BLdat %>%
+  within({
+    wave_mode <- sub("NWN", "NNW", as.character(wave_mode))
+    #compass <- cpoints[wave_dir]
+    #wave_mode <- factor(wave_mode, levels = names(cpoints))
+  })
+
+with(BLdat, table(wave_mode, useNA = "a"))
+```
+
+How the favoured wave directions vary over `zone` can be seen in the
+following circular bar graphs. *Noting that these are the wave
+directions on the day of fishing, and should not be considered as
+indicative of the wave climate in each zone.*
+
+```{r, fig.width=10, fig.height=10, out.width="100%"}
+
+# library(data.table)
+# windbreaks <- c(0,5,10,15,20,25,30,35,40,45,50,180)
+# windlabels <- c("0-5","5-9","10-14","15-19","20-24","25-29","30-34", "35-39","40-44","45-49","50+")
+# setDT(BLdat)[ , windgroup := cut(wind_speed, 
+#                                 breaks = windbreaks, 
+#                                 right = FALSE, 
+#                                 labels = windlabels)]
+# 
+# wavebreaks <- c(0,5,10,15,20,25,30,35,40,45,50,750)
+# wavelabels <- c("0-5","5-9","10-14","15-19","20-24","25-29","30-34", "35-39","40-44","45-49","50+")
+# setDT(BLdat)[ , wavegroup := cut(wave_power, 
+#                                 breaks = wavebreaks, 
+#                                 right = FALSE, 
+#                                 labels = wavelabels)]
+
+
+source("Windrose.R")
+library(viridis)
+p.sr1 <- plot.windrose(data = BLdat,
+                       KeyTitle="Wave power\n(kW/m)",
+                       spd = "wave_power",
+                       dir = "wave_dir",
+                       spdmax = 750,
+                       spdseq = c(0,5,10,20,40,80,160,320))
+                       #spdseq = c(seq(0, 750, 150))
+                       
+chart_title <- paste("Frequency and direction of Wave power by Zone","\nWave Power = 0.57*(Swell$Height)^2*Swell$Period",sep="")
+
+p.sr4 <- p.sr1 + facet_wrap(~zone, ncol = 2,drop=FALSE) + labs(title=chart_title,y="Wave power (kW/m)")# + theme(panel.grid.minor = 
+p.sr4 
+
+
+
+```
+
+How the favoured wind speeds vary over `zone` can be seen in the
+following circular bar graphs. *Noting that these are the wind speeds on
+the day of fishing, and should not be considered as indicative of the
+wind climate in each zone.* On the East coast of Tasmania, Winds with a
+westerly component are essentially offshore (with a few exceptions),
+thus we see fishing activity on days when winds appear relatively strong
+compared to fishing days the Western zone.
+
+```{r, fig.width=10, fig.height=10, out.width="100%"}
+
+source("Windrose.R")
+library(viridis)
+wind_sr1 <- plot.windrose(data = BLdat,
+                       KeyTitle="Wind speed \n(Knots)",
+                       spd = "wind_speed",
+                       dir = "wind_dir",
+                       spdmax = 40,
+                       spdseq = c(0,5,10,15,20,25,30,35,40))
+                       #spdseq = c(seq(0, 750, 150))
+                       
+chart_title <- "Frequency and direction of wind speed by Zone"
+
+wind_sr4 <- wind_sr1 + facet_wrap(~zone, ncol = 2,drop=FALSE) + labs(title=chart_title,y="Wind speed (Knots)")# + theme(panel.grid.minor = 
+wind_sr4 
+
+
+
+```
+
+### Sea surface temperature
+
+A crude summary of the sea surface temperatures included in the data is
+as follows:
+
+```{r histo, out.width = "50%"}
+ggplot(BLdat) + aes(x = sst) + 
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue") +
+  geom_density(aes(y = ..density..), colour = "red") +
+  theme_bw() + geom_vline(xintercept = c(11.5, 17.5), colour = "darkgreen")
+```
+
+From this the bulk of the temperatures are about 11.5-17.5 degrees; and
+over 20 is an extreme (max = `r max(BLdat$sst, na.rm = TRUE)`).
+
+SST, naturally, has a strong seasonal pattern and hence is strongly
+confounded with `month`. As `month` is a useful conditioning variable,
+the two will be in competition when considered as important predictors
+of catch.
+
+There is also some variation across zones, with the Bass Strait and
+Northern zones being slightly warmer in summer than Western and Eastern
+zones, as shown in the following diagram.
+
+```{r sst, fig.height=5, fig.width=9,out.width="60%", echo=FALSE}
+ggplot(BLdat) + aes(x = month, y = sst) + 
+  geom_boxplot(aes(fill = zone), size = 0.5) + facet_wrap(~zone) +
+  scale_fill_brewer(palette = "Set3") + theme(legend.position = "none") +
+  labs(x = "Month", y = "Sea surface temperature (deg. C)")
+```
+
+<!-- The medians are as in the Table below: -->
+
+<!-- ```{r sst_medians, echo=FALSE} -->
+
+<!-- with(BLdat, tapply(sst, list(zone, month), median)) %>% knitr::kable(digits = 2) -->
+
+<!-- ``` -->
+
+We know that SST effects are much more complex than simply a plot by
+month. If it is used in any model it would at least have an offset of
+about 6-8 years as papers relate the impact of SST more on recruitment
+events than adults. However, an extreme event may impact adults too.
+These concepts will be taken up at another stage as we are simply
+describing the data here.
+
+### Wave height and wave power
+
+First a boxplot of wave height over blocks (and zones):
+
+<!-- \pagebreak -->
+
+```{r WaveH, fig.height = 6, fig.width = 10, out.width = "100%", echo=FALSE}
+#| warning=FALSE
+ggplot(BLdat %>% filter(!is.na(wave_hght))) + 
+  aes(x = block, y = wave_hght, fill = zone) +
+  geom_boxplot(size = 0.25, outlier.alpha = 1/10, outlier.size = 0.5) + 
+  labs(y = "Wave height (m)") + ylim(0, 7) +
+  scale_fill_brewer(palette = "Set3") +
+  theme(legend.position = "bottom") #+ facet_wrap(~ zone)
+```
+
+The distribution is most variable in the North and West zones.
+
+Now for the wave power values. Note that these values have been
+*truncated* to below 5000, to allow the pattern in the bulk of the data
+to be visually appreciated. These few (88) very large values will exert
+very high leverage in any analysis involving wave power, unless steps
+are taken to mitigate the effect.
+
+<!-- \pagebreak -->
+
+```{r WaveP, fig.height = 6, fig.width = 10, out.width = "100%", echo=FALSE}
+ggplot(BLdat %>% filter(!is.na(wave_power) & wave_power < 200)) + 
+  aes(x = block, y = wave_power, fill = zone) +
+  geom_boxplot(size = 0.25, outlier.alpha = 1/10, outlier.size = 0.5) + 
+  labs(y = "Wave power (truncated at 5000)") + ylim(0, 200) +
+  scale_fill_brewer(palette = "Set3") +
+  theme(legend.position = "bottom") #+ facet_wrap(~ zone)
+```
+
+<!-- ### Wave direction -->
+
+<!-- This is most easily seen, as it varies across zone, in a circular diagram as -->
+
+<!-- follows. -->
+
+<!-- <!-- \pagebreak -->
+
+--\>
+<!-- ```{r compass, fig.height=10,fig.width=10,out.width="100%"} -->
+<!-- ggplot(BLdat) + aes(x = direction) + geom_bar(fill = "steelblue") +  -->
+<!--   coord_polar(start = -base::pi/12) + facet_wrap(~ zone) -->
+<!-- ``` -->
+
+<!-- By far the biggest wave direction is WSW and then SSW.  -->
+
+### Collinearity between wave properties
+
+The following figure shows the relationship between wave height and
+power, separately for each of the four zones:
+
+```{r Correlate, fig.height = 4, fig.width = 16, out.width = "100%", echo=FALSE}
+# xyplot(wave_power ~ wave_hght | zone, 
+#        data = subset(BLdat, complete.cases(wave_hght, wave_power)),
+#        as.table = TRUE, col = "brown",
+#        layout = c(4,1), pch = 16, cex = 0.25, drop.unused.levels = TRUE) # above but by block
+ggplot(subset(BLdat, complete.cases(wave_hght, wave_power))) +
+  aes(x = wave_hght, y = wave_power, colour = block) + geom_point(size = 0.75) +
+  facet_wrap(~ zone, nrow = 1) + theme(legend.position = "none")
+```
+
+From this, one can see there is a strong curved relationship between
+wave height and wave power. This is true by block. There are
+`r count(BLdat[is.na(BLdat$wave_hght),])` NAs in the `wave_hght`
+compared to `r count(BLdat[is.na(BLdat$wave_power),])` however, it does
+seem to be often the case when `wave_hght` is NA then `wave_power` is 0.
+Assuming that a zero is in fact a missing value for either variable, we
+arrive at the table:
+
+```{r tab, echo=FALSE}
+with(BLdat, table(height = is.na(wave_hght) | wave_hght == 0,
+                  power  = is.na(wave_power) | wave_power == 0)) %>% kable()
+```
+
+<!-- On the other hand, direction clearly does not relate in an obvious way to wave height or power. -->
+
+<!-- SST and wave weight bears no relationship not that I would expect one. -->
+
+<!-- However, the simple plot of catch versus effort shows -->
+
+## Marginal relationships to CPUE
+
+Putting it all together.
+
+First with wave height over blocks:
+
+```{r CPUECheck, fig.height=12, fig.width=10, out.width="80%", echo=FALSE}
+xyplot(logCPUE ~ wave_hght | block, data = subset(BLdat, !is.na(wave_hght)),
+       as.table = TRUE,
+       panel = function(...) {
+         panel.xyplot(...)
+         panel.lmline(..., col = "darkgreen")
+       },
+       layout = c(5,6), pch = 16, cex = 0.25, drop.unused.levels = TRUE)
+```
+
+Then, with SST over blocks:
+
+```{r, fig.height=12, fig.width=10, out.width="80%", echo=FALSE}
+xyplot(logCPUE ~ sst | block, data = subset(BLdat, !is.na(sst)),
+       as.table = TRUE,
+       panel = function(...) {
+         panel.xyplot(...)
+         panel.lmline(..., col = "darkgreen")
+       },
+       layout = c(5,6), pch = 16, cex = 0.25, drop.unused.levels = TRUE)
+
+```
+
+## Relationship between catch and hours
+
+This is a first look at the relationship between `log(catch)` and
+`log(hours)` ignoring predictors other than `year` or `block`. This is
+just a quick, first step, visualisation.
+
+First, a check with `year` as the conditioning variable. In the
+following layout the *green* line is the local regression line for the
+panel, whereas the *red* line, the same in all panels, is a reference
+line with slope 1. Parallelism between the two lines offers some support
+for catch being proportional to effort, (where the latter is nominal
+effort in hours).
+
+```{r, fig.height=12, fig.width=10, out.width="80%", echo=FALSE}
+xyplot(log(catch) ~ log(hours) | year, data = subset(BLdat, catch > 0),
+       as.table = TRUE,
+       panel = function(...) {
+         panel.xyplot(...)
+         panel.lmline(..., col = "darkgreen")
+         panel.abline(a = 5.652262, b = 1, col = "red")
+       },
+       layout = c(5,7), pch = 16, cex = 0.25, drop.unused.levels = TRUE)
+```
+
+A second view looks at the relationship conditional on `block` and
+marginalised over `year`. This is shown below.
+
+```{r, fig.height=12, fig.width=10, out.width="80%", echo=FALSE}
+xyplot(log(catch) ~ log(hours) | block, data = subset(BLdat, catch > 0),
+       as.table = TRUE,
+       panel = function(...) {
+         panel.xyplot(...)
+         panel.lmline(..., col = "darkgreen")
+         panel.abline(a = 5.652262, b = 1, col = "red")
+       },
+       layout = c(5,6), pch = 16, cex = 0.25, drop.unused.levels = TRUE)
+```
+
+Note that in these displays, zero catches have been excluded rather than
+re-jigged in some way to keep the log from failing. However `hours`
+*has* been re-jigged to ensure that no record with a positive Blacklip
+catch has an `hours` value of less than 5 minutes (arbitrarily chosen!).
+
+Although it is always important to have a first simple look at the data,
+there is nothing in these analyses that show that simple relationships
+are all that is needed to characterise the data.
+
+As a result, Part 2 will explore things further in the context of a
+standardisation.

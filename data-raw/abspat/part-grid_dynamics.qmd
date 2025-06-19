@@ -1,0 +1,3 @@
+# Quantifying spatial dynamics of reef use: exploiting the grid data  {#sec-grid_dyn .unnumbered}
+
+The previous chapters focused on characterising and describing spatial performance measures derived from bivariate kernel utilisation distribution polygons of individual fishing events (KUD). Those chapters directly explore the potential to replace time as a unit of effort with dive polygon area. In @sec-chapter3 we created maps of residuals which clearly demonstrate a spatio-temporal dynamic of fishing. The chapters in this section focus on how we might use the geo-referenced fishing data to determine the total area of reef utilised, and identify metrics that could provide performance measures for patterns in reef utilisation.

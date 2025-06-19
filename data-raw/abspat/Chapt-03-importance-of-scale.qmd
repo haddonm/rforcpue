@@ -1,0 +1,1396 @@
+# The Importance of Scale {#sec-chapter3}
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+source("_common.R")
+library(viridis)
+library(lubridate)
+library(mixedup)
+library(MuMIn)
+library(mgcv)
+library(ggeffects)
+library(zoo)
+library(gratia)
+library(parallel)
+library(sdmTMB)
+library(codeutils)
+
+```
+
+```{r}
+#| echo: false
+#| cache: false
+#| warning: false
+#| message: false
+
+## set datadir
+datadir <-  sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/", Sys.info()[["user"]])
+
+
+## load SAUmaster index
+saumaster_bl <- readxl::read_xlsx(file.path(datadir, "SAU_Master.xlsx"))
+
+## Load KUD objects
+
+all_kud_data <- readRDS(file.path(datadir, "AllKud75_production_2021.rds"))
+
+#all_kud_data_climate <- readRDS(file.path(datadir, "Climate_sfkud_2023_03_07.RDS")) 
+
+
+# kud_centroid <- all_kud_data %>% st_centroid() 
+# xy <- st_coordinates(kud_centroid) %>% 
+#   data.frame() %>% 
+#   setNames(c("easting", "northing"))
+# all_kud_data <- cbind(all_kud_data, xy)
+
+all_kud_data <- all_kud_data %>% 
+  filter(year(plaindate) > 2011) %>% 
+  within({
+   blockno[subblockno == "05D"] <- 6
+   subblockno[subblockno == "05D"] <- "06A"
+   
+  }) %>% 
+  left_join(saumaster_bl, 
+                    by = c("zone" = "newzone" , "blockno", "subblockno"))
+
+all_kud_data$SAU <- all_kud_data$SAU_CREF
+
+
+kud_df <- data.frame(st_coordinates(st_centroid(all_kud_data))) %>%  droplevels()
+
+
+## Run the dbscan algorithm
+epsilon <- 300 # radius
+min_points <- 15 # minimum points to form a cluster
+db_kud <- dbscan::dbscan(kud_df, eps = epsilon, minPts = min_points)
+
+## Map cluster id on to original kud sf object 
+all_kud_data <- all_kud_data %>% 
+    mutate(cluster_id = db_kud$cluster) %>%
+    filter(cluster_id >= 1)
+
+
+
+```
+
+```{r}
+#| echo: false
+
+
+## Load Docketbook data - Most recent
+abCEbl <- readRDS(sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/Climate_logbook_bl_2023_03_07.RDS", Sys.info()[["user"]]))
+abCEgl <- readRDS(sprintf("C:/Users/%s/Dropbox (Personal)/AbaloneData/Climate_logbook_gl_2023_03_07.RDS", Sys.info()[["user"]]))
+
+
+abCEbl <- abCEbl %>% within({
+  zone <- newzone
+}) %>% left_join(saumaster_bl, 
+                    by = c("zone" = "newzone", "blockno", "subblockno")) %>% 
+  filter(fishyear < 2023)
+
+abCEbl$SAU <- abCEbl$SAU_CREF
+
+source("aggregateDiveData.R")
+source("SAU_stndFuns.R")
+```
+
+```{r}
+#| echo: false
+
+l_day <-
+  l_day_data %>% filter(#zone %in% c("W", "E") & blockno %in% c(12, 21, 29) &
+                            SAU %in% c("SAU5", "SAU11", "SAU53", "SAU21", "SAU13", "SAU49BS", "SAU7") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+l_day <- l_day %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+l_day_list <- split(l_day, l_day$SAU)
+
+
+l_dive <-
+  l_dive_data %>% filter(#zone %in% c("W", "E") & blockno %in% c(12, 21, 29) &
+                            SAU %in% c("SAU5", "SAU11", "SAU53", "SAU21", "SAU13", "SAU49BS", "SAU7") &
+                            catch_est > 10 &
+                            effort_mins >= 5 &
+                            !is.na(SAU))  %>% ungroup() 
+
+l_dive <- l_dive %>%
+  within({
+    fishyear <- factor(fishyear)
+    fishmonth <- factor(fishmonth)
+    subblockno <- factor(subblockno)
+    blockno <- factor(blockno)
+    diver_id <- factor(diver_id)
+    SAU <- factor(SAU)
+  })
+
+l_dive_list <- split(l_dive, l_dive$SAU)
+
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+## testing
+dat <- l_day_list$SAU13
+
+mod1_ltime <- map2(l_day_list, "logrtime", stnd_fun_lme4)
+mod1_ltime_dive <- map2(l_dive_list, "logrtime", stnd_fun_lme4)
+clust_ltime_dive <- map2(l_dive_list, "logrtime", stnd_lme4_clust)
+
+diag_mod1_sub <- map_dfr(mod1_ltime_dive, mod_diag_fun)
+rownames(diag_mod1_sub) <- names(mod1_ltime_dive)
+diag_mod1_sub$SAU <- rownames(diag_mod1_sub)
+
+diag_mod1_clust <- map_dfr(clust_ltime_dive, mod_diag_fun)
+rownames(diag_mod1_clust) <- names(clust_ltime_dive)
+diag_mod1_clust$SAU <- rownames(diag_mod1_clust)
+
+
+raneff_vc_sub <- list_rbind(map(mod1_ltime_dive, raneff_prop), names_to = "SAU")
+raneff_vc_clust <- list_rbind(map(clust_ltime_dive, raneff_prop), names_to = "SAU")
+
+
+```
+
+## Introduction
+
+Read [@barnett2021]
+
+Adapt and run this code <https://pbs-assess.github.io/sdmTMB/articles/web_only/index-standardization.html>
+
+Catch and effort data in most fisheries are perceived as being noisy and variable. This perhaps unsurprising in that they often span large geographic distances, often with highly heterogeneous environments. Fishing takes place across a range of sea conditions, and effort is often rough guide rather than a precisely measured unit of time. We observed in Chapter 1 considerable levels of variation in the relationship between catch and effort. In Chapter 2 we observed moderate Conditional R^2^ (\~ 0.4 - 0.5) for many of the Spatial Assessment Units (SAUs) examined, indicating the terms included in the statistical model for catch rate standardisation are failing to capture a substantial proportion of the observed variance in the datasets. While we have included a within SAU spatial structure (subblock), this term contributed very little to the model outcomes (@tbl-varcomp). This would suggest either a level of homogeneity among subblocks within an SAU, or, that high levels of variation occurs at a scale much smaller than the scale of a subblock. Alternatively, there are other factors not included in the model that contribute to high variability in daily diver catch rates.
+
+A perceived advantage of the fine-scale fisheries collected through the GPS logger program is the potential to account for the high levels of variability in abalone fisheries catch rate data. Utilising the precise location of each fishing event, we an either dissect each SAU into smaller rule-based spatial units (rather than the arbitrarily imposed subblock boundary divisions), or go further and account for the exact spatial location in our linear model.
+
+Abalone fishery catch rates are always perceived as highly variable and unreliable, yet illustrations of the extent of variability in catch rates within a Spatial Assessment Unit (SAU) are rarely provided. In order to better understand the challenges with obtaining a mean annual catch rate for an SAU, catch rates are calculated at a range of time steps, from daily (mean of all fishing events in an SAU per day) to mean catch rate within a moving window of 5, 10, 30 and 90 days.
+
+This chapter links to two objectives:
+
+Objective 1: **Characterise the statistical properties, consistency, interpretability and assumptions of spatial and classic indicators of fishery performance.**
+
+Objective 2: **Develop methods for inclusion of fine-scale spatial data in CPUE standardisations.** \## Methods
+
+## Methods
+
+Input data are those spatial records that meet criteria outlined in @sec-chapter1. Noting that data capture is between 80% and 90% depending on the year, this opens a potential bias 
+
+### Statistical Models
+
+All lmer analyses here use the KUD dataset either pooled by diver/day, or by individual dive. The response is always log(catch) and modelled against log(effort) where effort is logger time in minutes.
+
+#### Modelling response variable at different scales
+
+While the GPS logger program records the duration (in minutes) for each fishing event, catch is reported as a daily total catch for each subblock visited. Catch per dive is achieved by pro-rata assignment of total catch to each dive based on duration of each dive. While we recognise this may have a smoothing effect on actual catch per dive, where catch rate for dives through the day might vary due to depth or other environmental drivers. By modelling catch at the dive level, rather than by day, we may be able to account for some of the unexplained variation in the model identified in @sec-chapter2. This is achieved by modelling catch achieved for one hour of effort at the day, and dive scales using the base mixed effects model outlined in @sec-chapter2.
+
+#### Including within SAU spatial structure in standardisation models
+
+Dividing an SAU into multiple spatial clusters as an alternative to arbitrary subblock divisions may capture more of the unexplained variation (residual variance) evident in the examination of the contribution of effects to total variance in  @sec-chapter2. This is achieved by applying spatial scan methods to the dive centroid, to create an empirical rule-based SAU subarea. Spatial density-based clustering methods require two parameter settings; a distance value (epsilon) to be used as the radius of the neighbourhood search, and the minimum number of points required for a unique cluster. Here we use the dbscan package [@dbscan] to assign a unique spatial cluster identifier to every dive record, with epsilon set at 300m and the minimum points per cluster set at 15. The new cluster variable is substituted for the subblock variable in the base standardisation model (@fig-clustplot).
+
+```{r clusterplot}
+#| label: fig-clustplot
+#| fig-cap: "Spatial Clustering of all dive events within SAU5, Subblock 5C, Northern Zone (2012 - 2021) into discrete groups by distance. DBSCAN generated clusters using a setting of 300m separation between the centroid of fishing events, and a minimum of 15 points to form a cluster. This approach found nine distinct spatial clusters of fishing activity within the singel Subblock 5C."
+#| fig-width: 8
+#| fig-height: 12
+#| out.height: 95%
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+# merge all kud polygons within each cluster
+clusters <- all_kud_data %>%
+  filter(SAU == "SAU5" & subblockno == "05C") %>% 
+  group_by(cluster_id) %>%
+  summarize(geometry = st_union(geometry)) %>% 
+  mutate(cluster_id = factor(cluster_id))
+
+
+clusters %>% ggplot() + #geom_sf(data = clusters_sf, alpha = 0.05) +
+  geom_sf(aes(colour = cluster_id), alpha = 0.6) +
+  geom_sf_text(aes(label =cluster_id),size = 5) 
+
+```
+
+#### Using high resolution information on location of fishing
+
+Much of the variation in catch rates is thought to be associated with high levels of patchiness in resource abundance. By modelling fishing data at the scale of individual dive, the centroid of the dive polygon representing the location of the fishing event can be used in a spatial regression approach. While several packages offer fixed effect spatial auto-regression capability, very few enable direct use of the spatial information in a mixed effect model.
+
+Two mixed effect spatial regression approaches are utilised here:
+
+a)  Coordinates (Easting and Northing) of the dive polygon centroid are included as a spline in a general additive mixed effect model (GAM) using the mgcv package [@mgcv].
+b)  A spatio-temporal LMM was used to examine the influence of spatial structure on the model fit to the case study dataset using the sdmTMB package [@Anderson2022].
+
+The approach using GAMs involved fitting the base CPUE standardisation model as a GAM, and then repeating the model with a term for a spline of easting and northing of the dive centroid. Model fits were examined using deviance explained and AIC. Scaled prediction plots using predicted annual mean catch per 1 hour of effort were used to examine the impact of inclusion of the spatial term.
+
+Spatially explicit GLMMs seek to address spatial and or temporal autocorrelation in a dataset, and provide insights into the space and time influences on response variables. The first step is to create an SPDE mesh using the centroid of the dive polygon, with a cut-off value of 5, where cut-off refers to the minimum distance between knots (vertices) of the resulting mesh [@Anderson2022]. This step builds a mesh across the spatial extent of the input dataset. For the GLMM component, the base standardisation model was used, except the (1\| subblock:fishyear) term was dropped as sdmTMB does not yet support interactions of this type. Three models were applied, spatial switched off (non-spatial) which should be equivalent to a GLMM from non-spatial modelling packages, spatial switched on (space) and lastly with switching both spatial and spatio-temporal modes on (space-time). The temporal component was intentionally coarse for this exercise, with the time resolution set to fishing year. To better understand the spatial scale of variation in the datasets, this exercise was run firstly with the coarse scale subarea term subblock, and then again with subblock replaced with the finer scale subarea term cluster_id. Model performance was compared using AIC. If fishing performance is relatively homogeneous within clusters, we would expect relatively little difference between the non-spatial and spatial model fits where the finer scale cluster term is used.
+
+## Results
+
+### Variability in daily catch rate
+
+Across all example SAUs, daily catch rates differ substantially over short time frames such as 10s of days ([@fig-dailycpue]). Daily catch rates appear to be lower and less variable during winter, but otherwise there is little evidence of a strong seasonal pattern. For example in SAU11, daily catch rate may vary by up to 150 Kg/Hr within as little as 30 days ([@fig-dailycpue] SAU11 panel). Moving window mean catch rates of 5 and 10 days also show short-term oscillations of up to 80 Kg/Hr. Over longer time windows, the 30 and 90 day moving window mean catch rates continue to show substantial oscillations of up to 50 kg/Hr. There are many potential explanations for this level of variability such as weather on the day of fishing, diver identity and knowledge, the subblock or location within the SAU, or high variability in the local abundance across fishing events. The contribution of environmental variables was examined in detail in appendices 10-12, with little evidence that weather imparts a strong influence on fishing performance in the majority of cases. The contribution of heterogeneity abalone abundance at fin spatial scales is the focus of the remainder of this chapter.
+
+```{r}
+#| label: fig-dailycpue
+#| fig-cap: "Mean daily catch rate (Kg/hr) by dive in 2013 for three case-study SAUs. Grey scale dots represent mean daily catch rate. Coloured lines represent a moving window mean catch rate calculated for window size: 5, 10, 30, and 90 days."
+#| fig-pos: "H"
+#| fig-width: 6
+#| fig-height: 6
+#| echo: false
+#| warning: false
+#| message: false
+
+
+day_in <- l_day %>% 
+  filter(SAU %in% c("SAU5", "SAU11", "SAU21", "SAU13")) %>% 
+  arrange(SAU, plaindate) %>% 
+    #st_set_geometry(NULL) %>% 
+  filter(
+      !is.infinite(catch_est) &
+      #blip_gps_cpue <= 400 &
+      fishyear == 2013
+  ) %>% 
+  group_by(SAU, plaindate) %>%
+  summarise(daycpue = mean(catch_est/(logrtime/60))) 
+  
+
+
+t_out <- day_in %>%
+  group_by(SAU) %>%
+  arrange(plaindate) %>% 
+  within({
+    w05 <- rollmean(daycpue,
+                    k = 5,
+                    fill = NA,
+                    align = 'center')
+    w10 <- rollmean(daycpue,
+                    k = 10,
+                    fill = NA,
+                    align = 'center')
+    w30 <- rollmean(daycpue,
+                    k = 30,
+                    fill = NA,
+                    align = 'center')
+    w90 <- rollmean(daycpue,
+                    k = 90,
+                    fill = NA,
+                    align = 'center')
+  })
+
+
+annotate.colors <- viridis(5, alpha = 1, begin = 0, end = 1, option = "D")
+
+#cols <- c("LINE1"="#f04546","LINE2"="#3591d1","BAR"="#62c76b")
+cols <- c("daily" = annotate.colors[1],
+          "05day" = annotate.colors[2],
+          "10day" = annotate.colors[3],
+          "30day" = annotate.colors[4],
+          "90day" = annotate.colors[5])
+
+t_out %>%
+  ggplot(aes(x = plaindate, y = daycpue)) +
+  # Data
+  geom_point(alpha = 0.5) +
+  #geom_line(alpha = 0.3, size = 0.75) +
+  geom_line(aes(y = w05, color = "05day"), size = 0.8) +
+  geom_line(aes(y = w10, color = "10day"), size = 0.8) +
+  geom_line(aes(y = w30, color = "30day"), size = 0.8) +
+  geom_line(aes(y = w90, color = "90day"), size = 0.8) +
+  #geom_line(data = tidyverse_downloads_rollmean, aes(y = mean_60)) +
+  # Aesthetics
+  theme_bw() +
+  #labs(title = paste0("Blacklip CPUE: SAU = ", unique(day_in$SAU)),
+  #     subtitle = "5, 10, 30, & 90 Day Moving Average") +
+  #scale_color_tq() +
+  theme(
+    legend.position = "right",
+    panel.grid.major = element_line(colour = "black", size = 0.5)
+  ) +
+  labs(y = "mean CPUE (daily)", x = "Date") + 
+  scale_x_date(date_breaks = "3 month",
+               minor_breaks = "2 week",
+               date_labels = "%b %d",
+               limits = as.Date(c('2013-01-01', '2013-12-31'))) +
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.4)) +
+  
+  scale_linetype_manual(
+    values = "dashed",
+    name = "Moving window",
+    labels =  c("5", "10", "30", "90") ,
+    guide = "legend"
+  ) +
+  scale_colour_manual(name = "moving\nwindow", values = cols) +
+  facet_wrap(~ SAU, ncol = 2, scales = "free")
+
+
+```
+
+### Modelling response variable at different scales: day vs dive
+
+Modelling the response variable (estimated catch) at the spatial resolution of individual dives rather than aggregated up to each fishing day, provides a number of opportunities for quantifying scales of spatial structure in our datasets. There was almost no difference in predicted mean catch per hour of effort when data were modelled by day or disaggregated to the scale of each dive event ([@fig-cpue-dayVSdive]). Mean expected catch only deviated in the final year of the time-series (2021), and is not likely due to the low sample size for 2021 in the study dataset.
+
+```{r}
+#| echo: false
+mod1_ltime_5 <- mod1_ltime$SAU5
+clust_ltime_dive_5 <- clust_ltime_dive$SAU5
+mod1_ltime_dive_5 <- mod1_ltime_dive$SAU5
+
+
+
+mod_l_dat <- l_day %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU5") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+mod_l_dat_dive <- l_dive %>% 
+  #st_set_geometry(NULL) %>% 
+  filter(SAU == "SAU5") %>% 
+ within({
+    fishyear <- factor(droplevels(fishyear))
+    fishmonth <- factor(droplevels(fishmonth))
+    subblockno <- factor(droplevels(subblockno))
+    diver_id <- factor(droplevels(diver_id))
+    #SAU <- factor(droplevels(SAU))
+  })
+
+
+kud_centroid <- mod_l_dat_dive %>% st_centroid() 
+
+xy <- st_coordinates(kud_centroid) %>% 
+  data.frame() %>% 
+  setNames(c("easting", "northing"))
+mod_l_dat_dive <- cbind(mod_l_dat_dive, xy)
+
+
+
+```
+
+```{r}
+#| echo: false
+
+# pdat <- with(dat,
+#                  expand.grid(logrtime = 60, 
+#                              # diver_ex = median(sau12in$diver_ex),
+#                              fishyear = levels(fishyear) |> factor(),
+#                              subblockno = levels(subblockno) |> factor())) |>
+#   within({
+#     year <- as.numeric(as.character(fishyear))
+#   })
+
+
+#get_call(mod5 )
+
+pdat_mod1_ltime <- mod_l_dat |> 
+  select(fishyear) |>
+  #select(fishyear, subblockno) |>
+  unique() |> 
+  arrange(fishyear) |>
+  #arrange(fishyear, subblockno) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat$diver_id[1]
+    fishmonth <- mod_l_dat$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+pdat_mod1_ltime_dive <- mod_l_dat_dive |> 
+  st_set_geometry(NULL) |>
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat_dive$diver_id[1]
+    fishmonth <- mod_l_dat_dive$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+pdat_mod1_ltime_dive_clust <- mod_l_dat_dive |> 
+  st_set_geometry(NULL) |>
+  select(fishyear) |>
+  unique() |> 
+  arrange(fishyear) |>
+  within({
+    logrtime <- 60
+    diver_id <- mod_l_dat_dive$diver_id[1]
+    fishmonth <- mod_l_dat_dive$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+  })
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time Day
+
+vc <- VarCorr(mod1_ltime_5)$cond
+s2 <- sigma(mod1_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(mod1_ltime_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime$fmod_BC <- (predict(mod1_ltime_5 , newdata = pdat_mod1_ltime, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_ltime_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_ltime_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod1_ltime |> left_join(x) |> left_join(y)
+# 
+# pdat_mod1_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+# ## end by hand
+
+pdat_mod1_ltime$method <- "L_Time_Day"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time Dive
+
+vc <- VarCorr(mod1_ltime_dive_5)$cond
+s2 <- sigma(mod1_ltime_dive_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "subblockno", 
+                                "subblockno:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(mod1_ltime_dive_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime_dive$fmod_BC <- (predict(mod1_ltime_dive_5 , newdata = pdat_mod1_ltime_dive, re.form = ~0) + s2/2) |> exp()
+
+
+### start by hand
+# x <- ranef(mod1_ltime_dive_5)$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_ltime_dive_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod1_ltime_dive |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod1_ltime_dive$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_ltime_dive$method <- "L_Time_Dive"
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## Mod1 Time Dive
+
+vc <- VarCorr(clust_ltime_dive_5)$cond
+s2 <- sigma(clust_ltime_dive_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth", "cluster_id", 
+                                "cluster_id:fishyear")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+s2c <- sigma(clust_ltime_dive_5 )^2 + (vc %>% unclass() %>% 
+                            .[c("diver_id", "fishmonth")] %>% 
+                            unlist() %>% 
+                            sum())
+
+
+
+pdat_mod1_ltime_dive_clust$fmod_BC <- (predict(clust_ltime_dive_5 , newdata = pdat_mod1_ltime_dive_clust, re.form = ~0) + s2/2) |> exp()
+
+
+# ### start by hand
+# x <- ranef(mod1_time_5 )$cond$subblockno |>
+#   as.data.frame() |>
+#   setNames("sub_") |>
+#   rownames_to_column("subblockno")
+# y <- ranef(mod1_time_5 )$cond$`subblockno:fishyear` |>
+#   setNames("sub_fish_") |>
+#   rownames_to_column("z") |>
+#   separate_wider_delim(z, ":", names = c("subblockno", "fishyear"))
+# tmp <- pdat_mod2_ltime |> left_join(x) |> left_join(y)
+# ## end by hand
+# 
+# pdat_mod2_ltime$pmod_BC <- with(tmp, exp(log(fmod_BC) + sub_ + sub_fish_ + s2c/2))
+pdat_mod1_ltime_dive_clust$method <- "L_Time_Dive_Clust"
+
+```
+
+```{r}
+#| label: fig-cpue-dayVSdive
+#| fig-cap: " Modelling the response variable (catch) at day vs dive scale  for Northern Zone, SAU 5(subblocks 5A, 5B, 5C, 6A, 6C, 6D).  Catch achieved is predicted for 1 hour of fishing effort."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+Crude_CPUE <- mod_l_dat %>% 
+  group_by(fishyear) %>% 
+  summarise(fmod_BC = sum(catch_est)/sum(logrtime/60), .groups = "drop") %>% 
+  within({
+    year <- as.numeric(as.character(fishyear))
+  })
+
+Crude_CPUE$method <- "Crude"
+
+
+predict_mod1_5 <- bind_rows(pdat_mod1_ltime, pdat_mod1_ltime_dive, Crude_CPUE)
+
+# ## within needs to be done by blockno - must work out how to do that
+predict_mod1_5 <- predict_mod1_5 %>% within({
+  scaled <- ave(
+    fmod_BC,
+    method,
+    FUN = function(x)
+      #x / x[1]
+      x / mean(x)
+  )
+})
+
+
+CPUEplot <-
+  ggplot(predict_mod1_5,
+         aes(
+           x = factor(year),
+           y = fmod_BC,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  #ylim(20, 120) +
+  labs(y = "Catch (per dive hour) ") +
+  scale_colour_manual(values = c(
+    Crude = "black",
+    L_Time_Day = greenish,
+    L_Time_Dive = blueish,
+    L_Time_Dive_Clust = redish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_5, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+CPUEplot <- update_labels(CPUEplot, list( x = "Year"))
+
+CPUEplot
+
+```
+
+### Accounting for within SAU spatial structure
+
+Replacement of the coarse-scale (subblock) random effect predictor with a finer-scale (cluster_id) predictor to account for within SAU spatial structure returned mixed results. For some SAUs (SAU11, SAU21), replacing the coarse-scale subblock categorical predictor with the fine-scale cluster predictor, marginally increased the Conditional R^2^ ([@tbl-R2-clus]), indicating a small improvement in capture of variation within the dataset. However, the inverse was observed for SAU49 where inclusion of cluster_id decreased Conditional R^2^. This is supported by a corresponding increase in residual variance for SAU49 modelled with cluster_id ([@tbl-varcomp-clus]). While in most cases, the switch from coarse to fine for the sub-SAU term had little effect on the overall variance accounted for by the model, there was an effect on the proportion of variance accounted for by the model random effects. With the exception of SAU49 and SAU7, shifting to the finer cluster term decreased the residual variance, although there was no real change in SAU13, which had only three distinct spatial clusters of fishing events. The trend in estimated mean catch per 1 hour fishing event using subblock or cluster terms was also very similar ([@fig-cpue-cluster]). The absence of a strong effect of the within SAU spatial structure term (subblock vs cluster) on either Conditional R^2^ or on estimated mean catch suggests, that in most SAUs they are not an effective mechanism to account for spatial structure in the dataset.
+
+```{r}
+#| label: tbl-R2-clus
+#| tbl-cap: "Accounting for within SAU spatial structure with fine or coarse scale  division. Marginal (R2_M) and Conditional(R2_C) R^2^ for five Spatial Assessment Units (SAUs) in the Tasmanian abalone fishery."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+diag_mod1_sub$structure <- "Sub-block"
+diag_mod1_clust$structure <- "Cluster"
+
+
+R2_table <- bind_rows(diag_mod1_sub, diag_mod1_clust)
+
+
+rdocx <- as_grouped_data(x = R2_table, groups = c("structure")) |>
+flextable(col_keys = c("structure", "SAU", "R2_marginal", "R2_conditional")) |>
+  colformat_double(j = c(3, 4),
+                   digits = 2,
+                   na_str = "") |>
+  set_header_labels(SAU = "SAU") |> autofit()
+
+
+rdocx
+
+rdocx |> save_as_docx( path = "C:/Users/cmundy/Dropbox (Personal)/AbSpatial/scale_r2.docx")
+
+
+
+
+```
+
+\newpage
+
+```{r}
+#| label: tbl-varcomp-clus
+#| tbl-cap: "Accounting for within SAU spatial structure with fine  or coarse scale  division. Contribution (% explained) of individual random effects to the model. "
+#| echo: false
+#| warning: false
+#| message: false
+
+rans_sub <- raneff_vc_sub %>% dplyr::select(SAU, group, var_prop) %>%  pivot_wider(names_from = SAU, values_from = var_prop) 
+rans_clust <- raneff_vc_clust %>% dplyr::select(SAU, group, var_prop) %>%  pivot_wider(names_from = SAU, values_from = var_prop) 
+
+
+rans_sub$structure <- "Sub-block"
+rans_clust$structure <- "Cluster"
+
+
+rans_table <- bind_rows(rans_sub, rans_clust)
+
+
+raneffects <- as_grouped_data(x = rans_table, groups = c("structure")) |>
+flextable(col_keys = c("structure", "group", "SAU5", "SAU49", "SAU11", "SAU13", "SAU21", "SAU7")) |>
+  colformat_double(j = c(3, 8),
+                   digits = 2,
+                   na_str = "") |>
+  set_header_labels(group = "Predictor") |> autofit()
+
+
+
+raneffects |> save_as_docx( path = "C:/Users/cmundy/Dropbox (Personal)/AbSpatial/raneffects.docx")
+
+
+
+```
+
+```{r}
+#| label: fig-cpue-cluster
+#| fig-cap: " Modelling the response variable (catch) at the dive scale, with either subblock or cluster terms to account for within SAU spatial structure.  Figure shows results for Northern Zone, SAU5 (subblocks 5A, 5B, 5C, 6A, 6C, 6D).  Catch achieved is predicted for 1 hour of fishing effort."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+predict_clust_mod1_5 <- bind_rows(pdat_mod1_ltime_dive, pdat_mod1_ltime_dive_clust, Crude_CPUE)
+
+# ## within needs to be done by blockno - must work out how to do that
+predict_mod1_5 <- predict_mod1_5 %>% within({
+  scaled <- ave(
+    fmod_BC,
+    method,
+    FUN = function(x)
+      exp(x / x[1])
+  )
+})
+
+
+
+CPUEplot <-
+  ggplot(predict_clust_mod1_5,
+         aes(
+           x = factor(year),
+           y = fmod_BC,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  #ylim(20, 120) +
+  labs(y = "Catch (per dive hour) ") +
+  scale_colour_manual(values = c(
+    Crude = "black",
+    L_Time_Dive = blueish,
+    L_Time_Dive_Clust = redish
+  )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_5, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+CPUEplot <- update_labels(CPUEplot, list( x = "Year"))
+
+CPUEplot
+
+```
+
+### Including precise location of dive events in the standardisation model
+
+#### Using GAM with a spline to account for spatial structure
+
+Inclusion of a spline term in a GAM model to account for precise location of each fishing event had minimal impact on the proportion of deviance explained by the model ([@tbl-dev-gam]), although there was a noticeable reduction in AIC with the inclusion of the spatial spline ([@tbl-AIC-gam]). There appeared to be little corresponding impact on the temporal trend in the estimated annual mean catch rate ([@fig-GAM-SAU5]), although the GAM model suggests the fishery reached a low point in 2016, whereas the non-spatial glmmTMB model suggests the low point in the time-series occurred in 2018 ([@fig-cpue-cluster]).
+
+Exploration of the residuals by year and spatial location identify high levels of local variation in residuals, with substantial change among years ([@fig-GAM-resids]).
+
+```{r}
+#| cache: true
+#| echo: false
+#| message: false
+
+## Dive
+
+cl <- makeCluster(detectCores() - 2)
+
+gam_dive <-
+  bam(
+    log(catch_est) ~ offset(log(logrtime)) + fishyear +
+      s(cluster_id, bs = "re") + 
+      s(cluster_id,fishyear, bs="re") + 
+      s(diver_id, bs = "re") +
+      s(fishmonth, bs = "re"),
+    data = mod_l_dat_dive,
+    cluster = cl
+  )
+stopCluster(cl)
+rm(cl)
+
+# newdat_dive <- data_grid(gam_dive, c("fishyear", "cluster_id", "fishmonth", "diver_id"))
+# CPUEdive <- ggpredict(gam_dive, "fishyear", newdata = newdat_dive, condition = c(logrtime = 60) ) 
+
+CPUEdive <- predict_response(gam_dive, c("fishyear"))
+
+CPUEdive$method <- "Gam_Dive"
+
+
+## Dive XY
+
+mod_l_dat_dive$x <- mod_l_dat_dive$easting/1000
+mod_l_dat_dive$y <- mod_l_dat_dive$northing/1000
+
+cl <- makeCluster(detectCores() - 2)
+gam_diveXY <-
+  bam(
+    log(catch_est) ~ offset(log(logrtime)) + fishyear +
+      s(cluster_id, bs = "re") + 
+      s(cluster_id,fishyear, bs="re") + 
+      s(diver_id, bs = "re") +
+      s(fishmonth, bs = "re") + s(x, y),
+    data = mod_l_dat_dive,
+    cluster = cl
+  )
+stopCluster(cl)
+rm(cl)
+
+## two lines below not working (2024-06-20)
+# newdat_dive <- data_grid(gam_diveXY, c("fishyear", "cluster_id", "fishmonth", "diver_id"))
+# CPUEdiveXY <- ggpredict(gam_diveXY, "fishyear", newdata = newdat_dive, condition = c(logrtime = 60) ) 
+
+CPUEdiveXY <- predict_response(gam_diveXY, c("fishyear"))
+
+CPUEdiveXY$method <- "Gam_DiveXY"
+
+
+
+```
+
+```{r}
+#| label: tbl-dev-gam
+#| tbl-cap: "Change in model deviance explained by accounting for spatial location of each dive event by adding a spline on easting and northing of the dive centroid. Data used in this analysis were from SAU5 in the Tasmanian abalone fishery."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+dev_gam_dive <-  as.data.frame(summary(gam_dive)$dev.expl) %>% within({scale <- "non-spatial" })
+colnames(dev_gam_dive) <- c("devExplained", "scale")
+dev_gam_divexy <-  as.data.frame(summary(gam_diveXY)$dev.expl) %>% within({scale <- "spatial" })
+colnames(dev_gam_divexy) <- c("devExplained", "scale")
+
+dev_gam <- bind_rows(dev_gam_dive, dev_gam_divexy)
+
+dev_gam |> flextable(col_keys = c("scale", "devExplained")) |>
+  colformat_double(j = c(2),
+                   digits = 2,
+                   na_str = "N/A") |>
+  set_header_labels(scale = "Scale", R2m = "R2_marginal", R2c = "R2_conditional") |> autofit()
+
+
+```
+
+```{r}
+#| label: tbl-AIC-gam
+#| tbl-cap: "Change in model AIC with increasing spatial resolution."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+AIC_gam <- AIC(gam_dive, gam_diveXY) |> tibble()
+rownames(AIC_gam) <- c("dive", "diveXY")
+AIC_gam$model <- rownames(AIC_gam)
+
+docx_aicgamm <- AIC_gam |> flextable(col_keys = c("model", "df", "AIC")) |>
+  colformat_double(j = c(2,3),
+                   digits = 1,
+                   na_str = "N/A") |>
+  autofit()
+
+
+docx_aicgamm
+
+docx_aicgamm |> save_as_docx( path = "C:/Users/cmundy/Dropbox (Personal)/AbSpatial/GAMMAIC.docx")
+
+
+
+
+```
+
+```{r}
+#| label: fig-GAM-SAU5
+#| fig-cap: " GAM Modelling day vs dive scale catch and effort for SAU5, Northern Zone. Standardised CPUA (catch achieved for 0.5Ha of fishing area)."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 8
+#| echo: false
+#| warning: false
+#| message: false
+
+gam_predictions <- bind_rows(CPUEdive[,c("x","predicted","method")], CPUEdiveXY[,c("x","predicted","method")])
+
+
+gam_predictions <- gam_predictions %>%
+  group_by(method) %>% within({
+    scaled <- ave(
+      predicted,
+      method,
+      FUN = function(x)
+        #x / x[1]
+        x/mean(x)
+    )
+  })
+
+
+scaleplot_CPUE_gam <-
+  ggplot(gam_predictions,
+         aes(
+           x = x,
+           y = scaled,
+           #y = predicted,
+           colour = factor(method),
+           group = factor(method)
+         )) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  #ylim(20, 120) +
+  labs(y = "Catch per dive hour") +
+  scale_colour_manual(values = c(
+    Gam_Dive = redish,
+    Gam_DiveXY = blueish
+      )) +
+  #geom_errorbar(aes(ymin=Scaled-se, ymax=Scaled+se), width=.1) +
+  scale_x_discrete(breaks = with(predict_mod1_5, seq(min(year), max(year), by = 2))) +
+  theme_bw() + theme(panel.grid.minor.x = element_blank(),
+                     axis.text = element_text(size = 12),
+                     axis.title.y = element_text(size = 14),
+                     axis.title.x = element_text(size = 14),
+                     legend.position = "bottom") #+
+#facet_wrap(~ blockno, scales = "fixed")
+
+scaleplot_CPUE_gam <- update_labels(scaleplot_CPUE_gam, list( x = "Year"))
+scaleplot_CPUE_gam
+
+
+
+```
+
+```{r}
+#| label: fig-GAM-resids
+#| fig-cap: "Residual plots by year for SAU5, Northern Zone from model fitted with subblock term. Only data from subblock 6C are presented here for clarity.  Spatial location included as a spline smooth in the GAM model using easting and northing of the dive centroid."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 10
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+mod_l_dat_dive$res_gam2 <- as.numeric(residuals(gam_dive))
+
+mod_l_dat_dive %>%
+  filter(subblockno == "06C") %>% 
+  ggplot(aes(easting, northing, colour = res_gam2)) +
+  geom_point(size = 1.5) + 
+  scale_color_gradient2() +    
+  #coord_fixed() + 
+  facet_wrap( ~year, ncol = 3) + 
+  theme_bw()
+```
+
+#### Using spatially explicit GLMMs to account for spatial structure
+
+The basis of the spatially explicit linear mixed effects model is a SPDE (stochastic partial differential equation) mesh [@fig-meshplot]. The resolution of the mesh can be configured from fine to coarse, with obvious trade-offs between computation speed and spatial resolution.
+
+Direct comparison between non-spatial and spatio-temporal model fits is not possible, although a comparison of the improved performance from using a different within-SAU term (subblock vs cluster) can provide insights into the improvements gained by addressing spatial structure directly in the model. For the non-spatial model, a marked reduction in model AIC was observed for the model using cluster_id as the within SAU term compared to using the coarser subblock term ([@tbl-AIC-sdm]). When spatial or spatio-temporal terms are included the improvement in AIC is negligible ([@tbl-AIC-sdm]).
+
+Examination of the spatial structure in residuals through time suggests that the majority of variation in catch rates occurs at a very fine scale, although this does vary through time and some broad spatial structure is evident regardless of whether subblock or cluster is added as the within SAU term ([@fig-sdm-resids-sb], [@fig-sdm-resids-cl]). The spatial map of residuals matches very closely to that returned from the GAM model ([@fig-GAM-resids]) In 2012, there is considerable local variation in residuals across the fishing grounds in subblock 6C. In 2018 ad 2019, when fishery performance was lowest ([@fig-cpue-cluster]), the residuals are largely negative across all of Subblock 6C ([@fig-sdm-resids-sb], [@fig-sdm-resids-cl]). While there is a small level of deviation between the non-spatial model residuals and the spatio-temporal model residuals, there are no outstanding differences, or differences that are of concern ([@fig-sdm-residplot-sb], [@fig-sdm-residplot-cl]).
+
+The difference between non-spatial, spatial, and spatio-temporal standardised annual mean catch rate was negligible, for both the subblock and cluster term models ([@fig-sdm-trends-sb], [@fig-sdm-trends-cl]). This is consistent with a lack of major shift in the residuals ([@fig-sdm-residplot-sb], [@fig-sdm-residplot-cl]), and also consistent with the spatial and non-spatial GAM models.
+
+```{r}
+#| label: fig-meshplot
+#| fig-cap: "Spatial mesh for Block6 used as the basis for the spatially explicit lmm."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 10
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+## Subblock
+
+mod_l_dat_dive$logcpue <- log(mod_l_dat_dive$blip_gps_cpue)
+mod_l_dat_dive$logtime <- log(mod_l_dat_dive$logrtime/60)
+mod_l_dat_dive$logcatch <- log(mod_l_dat_dive$catch_est)
+mod_l_dat_dive$timenum <- as.numeric(mod_l_dat_dive$plaindat)
+
+
+indat <- mod_l_dat_dive %>% 
+  st_set_geometry(NULL) 
+
+mesh <- make_mesh(indat, xy_cols = c("x", "y"), cutoff = 0.5)
+plot(mesh)
+
+mod_dive_sb <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | subblockno) +
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+   # time = "plaindate", # had to turn off 2024-06-20 to make it run
+    #time = "fishyear",
+    spatial = "off",
+    spatiotemporal = "off",
+    family = gaussian(link = "identity")
+  )
+
+
+mod_dive_space_sb <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | subblockno) + 
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+   # time = "plaindate", # had to turn off 2024-06-20 to make it run
+    #time = "fishyear", # had to turn off 2024-06-20 to make it run
+    spatial = "on",
+    spatiotemporal = "off",
+    family = gaussian(link = "identity")
+  )
+
+mod_dive_spacetime_sb <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | subblockno) +
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+    #time = "plaindate",
+    time = "fishyear",
+    extra_time = "timenum",
+    spatial = "on",
+    spatiotemporal = "IID",
+    family = gaussian(link = "identity")
+  )
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+## Cluster_id
+mod_l_dat_dive$cluster_id <- factor(mod_l_dat_dive$cluster_id)
+mod_l_dat_dive$logcpue <- log(mod_l_dat_dive$blip_gps_cpue)
+mod_l_dat_dive$x <- mod_l_dat_dive$easting/1000
+mod_l_dat_dive$y <- mod_l_dat_dive$northing/1000
+
+mod_l_dat_dive$logtime <- log(mod_l_dat_dive$logrtime/60)
+mod_l_dat_dive$logcatch <- log(mod_l_dat_dive$catch_est)
+
+
+indat <- mod_l_dat_dive %>% 
+  st_set_geometry(NULL)
+tictoc::tic("mesh5")
+mesh <- make_mesh(indat, xy_cols = c("x", "y"), cutoff = 0.5)
+tictoc::toc()
+
+
+mod_dive_cl <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | cluster_id) +
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+    #time = "plaindate", # had to turn off 2024-06-20 to make it run
+    #time = "fishyear", 
+    spatial = "off",
+    spatiotemporal = "off",
+    family = gaussian(link = "identity")
+  )
+
+mod_dive_space_cl <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | cluster_id) + 
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+    #time = "plaindate", # had to turn off 2024-06-20 to make it run
+    #time = "fishyear", 
+    spatial = "on",
+    spatiotemporal = "off",
+    family = gaussian(link = "identity")
+  )
+
+mod_dive_spacetime_cl <-
+  sdmTMB(
+    logcatch ~ fishyear +
+      (1 | cluster_id) +
+      (1 | diver_id) +
+      (1 | fishmonth),
+    data = indat,
+    offset = "logtime",
+    mesh = mesh,
+    #time = "plaindate", # had to turn off 2024-06-20 to make it run
+    time = "fishyear", 
+    extra_time = "timenum",
+    spatial = "on",
+    spatiotemporal = "IID",
+    family = gaussian(link = "identity")
+  )
+
+
+```
+
+```{r}
+#| label: tbl-AIC-sdm
+#| tbl-cap: "Spatially explicit GLM modelling of abalone abundance. GLM formula was identical for all three models, with **subblock** and **cluster** used as alternative  within SAU random effect terms."
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+AIC_sdm_nsp <-AIC(mod_dive_sb, mod_dive_cl) |> tibble()
+rownames(AIC_sdm_nsp) <- c("subblock", "cluster")
+AIC_sdm_nsp$withinSAU <- rownames(AIC_sdm_nsp)
+AIC_sdm_nsp$structure <- "non-spatial"
+
+AIC_sdm_sp <-AIC(mod_dive_space_sb, mod_dive_space_cl) |> tibble()
+rownames(AIC_sdm_sp) <- c("subblock", "cluster")
+AIC_sdm_sp$withinSAU <- rownames(AIC_sdm_sp)
+AIC_sdm_sp$structure <- "spatial"
+
+AIC_sdm_spt <-AIC(mod_dive_spacetime_sb, mod_dive_spacetime_cl) |> tibble()
+rownames(AIC_sdm_spt) <- c("subblock", "cluster")
+AIC_sdm_spt$withinSAU <- rownames(AIC_sdm_spt)
+AIC_sdm_spt$structure <- "space-time"
+
+AIC_sdm <- bind_rows(AIC_sdm_nsp, AIC_sdm_sp, AIC_sdm_spt)
+
+docxaic_sdm <- AIC_sdm |> flextable(col_keys = c("structure", "withinSAU", "df", "AIC")) |>
+  merge_v(j="structure") |>
+  colformat_double(j = c(4),
+                   digits = 1,
+                   na_str = "N/A") |>
+  autofit()
+
+docxaic_sdm
+
+docxaic_sdm |> save_as_docx( path = "C:/Users/cmundy/Dropbox (Personal)/AbSpatial/sdmAIC.docx")
+
+
+
+```
+
+```{r}
+#| label: fig-sdm-resids-sb
+#| fig-cap: "Residual plots by year for SAU5, Northern Zone from model fitted with subblock term.. Only data from subblock 6C are presented here for clarity.  Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 10
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+indat$sb_resids <- residuals(mod_dive_sb) 
+indat$sb_resids_space <- residuals(mod_dive_space_sb) 
+indat$sb_resids_spacetime <- residuals(mod_dive_spacetime_sb) 
+
+
+indat %>% filter(subblockno == "06C") %>% ggplot(aes(x, y, col = sb_resids_space)) +
+  scale_colour_gradient2() +
+  geom_point(size = 1.5) +
+  facet_wrap(~year, ncol = 3) +
+ # coord_fixed() +
+  theme_bw()
+
+
+```
+
+```{r}
+#| label: fig-sdm-resids-cl
+#| fig-cap: "Residual plots by year for SAU5, Northern Zone from model fitted with cluster term. Only data from subblock 6C are presented here for clarity.  Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 10
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+indat$cl_resids <- residuals(mod_dive_cl) 
+indat$cl_resids_space <- residuals(mod_dive_space_cl) 
+indat$cl_resids_spacetime <- residuals(mod_dive_spacetime_cl) 
+
+
+indat %>% filter(subblockno == "06C") %>% ggplot(aes(x, y, col = cl_resids_space)) +
+  scale_colour_gradient2() +
+  geom_point(size = 1.5) +
+  facet_wrap(~year, ncol = 3) +
+ # coord_fixed() +
+  theme_bw()
+
+
+
+```
+
+```{r}
+#| label: fig-sdm-residplot-sb
+#| fig-cap: "Plot of residuals for non-spatial vs spatiotemporal model for SAU5, Northern Zone from model fitted with subblock term.  Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid. Date of fishing is included as a Spatiotemporal term."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 8
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+indat %>% ggplot(aes(x = sb_resids, y = sb_resids_spacetime, color = subblockno)) + 
+  scale_color_viridis_d() +
+  geom_point(size = 1) + facet_wrap(~ fishyear, ncol = 2)
+
+```
+
+```{r}
+#| label: fig-sdm-residplot-cl
+#| fig-cap: "Plot of residuals for non-spatial vs spatiotemporal model for SAU5, Northern Zone from model fitted with subblock term.  Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid. Date of fishing is included as a Spatiotemporal term."
+#| fig-pos: "H"
+#| fig-width: 7
+#| fig-height: 8
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+indat %>% ggplot(aes(x = cl_resids, y=cl_resids_spacetime, color=cluster_id)) + 
+  scale_color_viridis_d() +
+  geom_point(size = 1.5) + facet_wrap(~ fishyear, ncol = 2)
+
+```
+
+```{r sdm_predict_sb}
+#| label: fig-sdm-trends-sb
+#| fig-cap: "Space-time modelling of the response variable (catch) for SAU5, Northern Zone from model fitted with subblock term. Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid. Date of fishing is included as a Spatiotemporal term."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 9
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+nd_sb <- indat |>
+  #st_set_geometry(NULL) |>
+  #dplyr::select(fishyear, cluster_id, plaindate) |>
+  #dplyr::select(fishyear, subblockno, plaindate) |>
+  dplyr::select(fishyear, subblockno, timenum) |>
+  #dplyr::select(fishyear) |>
+  unique() |>
+  #arrange(fishyear, cluster_id, plaindate) |>
+  #arrange(fishyear, subblockno, plaindate) |>
+  arrange(fishyear, subblockno, timenum) |>
+  
+  #arrange(fishyear) |>
+  within({
+    #logtime <- 4.094345
+    diver_id <- mod_l_dat_dive$diver_id[1]
+    fishmonth <- mod_l_dat_dive$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+    #time <- plaindate
+    time <- timenum
+  })
+
+
+sb_p <- predict(mod_dive_sb, newdata = nd_sb, se_fit = TRUE, re_form = ~ 0)
+sb_p$method <- "non-spatial"
+sb_p_space <- predict(mod_dive_space_sb, newdata = nd_sb, se_fit = TRUE, re_form = ~ 0) 
+sb_p_space$method <- "spatial"
+sb_p_spacetime <- predict(mod_dive_spacetime_sb, newdata = nd_sb, se_fit = TRUE, re_form = ~ 0, re_form_iid = ~ 0) 
+sb_p_spacetime$method <- "spatiotemporal"
+
+spaceme_sb <- bind_rows(sb_p, sb_p_space, sb_p_spacetime)
+spaceme_sb <- spaceme_sb %>%
+  within({
+    xt <- exp(est)
+    scaled <- ave(
+      xt,
+      method, subblockno,
+      FUN = function(x)
+        #exp(x / x[1])
+        x/mean(x)
+    )
+  })
+
+distinct_sb <- spaceme_sb %>% dplyr::select(year, method, scaled, subblockno) %>% distinct()
+
+
+ggplot(distinct_sb, aes(year, scaled, group=method, colour=method)) +
+  geom_line() + geom_point()  + theme(legend.position="bottom") + facet_wrap(~ subblockno, ncol = 3) #+ geom_ribbon(alpha = 0.4) 
+
+
+```
+
+```{r sdm_predict_cl}
+#| label: fig-sdm-trends-cl
+#| fig-cap: "Space-time modelling of the response variable (catch) for SAU5, Northern Zone from model fitted with cluster term.  Spatial location included as a mesh to the sdmTMB model using easting and northing of the dive centroid. Date of fishing is included as a Spatiotemporal term."
+#| fig-pos: "H"
+#| fig-width: 8
+#| fig-height: 9
+#| out-height: 95%
+#| echo: false
+#| warning: false
+#| message: false
+
+nd_cl <- indat |>
+  #st_set_geometry(NULL) |>
+  #dplyr::select(fishyear, cluster_id, plaindate) |>
+  dplyr::select(fishyear, cluster_id, timenum) |>
+ #dplyr::select(fishyear, subblockno) |>
+  #dplyr::select(fishyear) |>
+  unique() |>
+  #arrange(fishyear, cluster_id, plaindate) |>
+  arrange(fishyear, cluster_id, timenum) |>
+  #arrange(fishyear, subblockno) |>
+  #arrange(fishyear) |>
+  within({
+    #logtime <- 4.094345
+    diver_id <- mod_l_dat_dive$diver_id[1]
+    fishmonth <- mod_l_dat_dive$fishmonth[1]
+    year <- as.numeric(as.character(fishyear))
+    #time <- plaindate
+    time <- timenum
+  })
+
+
+cl_p <- predict(mod_dive_cl, newdata = nd_cl, se_fit = TRUE, re_form = ~ 0)
+cl_p$method <- "non-spatial"
+cl_p_space <- predict(mod_dive_space_cl, newdata = nd_cl, se_fit = TRUE, re_form = ~ 0)
+cl_p_space$method <- "spatial"
+cl_p_spacetime <- predict(mod_dive_spacetime_cl, newdata = nd_cl, se_fit = TRUE, re_form = ~ 0, re_form_iid = ~ 0)
+cl_p_spacetime$method <- "spatiotemporal"
+
+spaceme_cl <- bind_rows(cl_p, cl_p_space, cl_p_spacetime)
+spaceme_cl <- spaceme_cl %>%
+  within({
+    xt <- exp(est)
+    scaled <- ave(
+      xt,
+      method, cluster_id,
+      FUN = function(x)
+        #exp(x / x[1])
+        x/mean(x)
+    )
+  })
+
+
+distinct_cl <- spaceme_cl %>% dplyr::select(year, method, est, xt, scaled, cluster_id) %>% distinct()
+
+
+ggplot(distinct_cl, aes(year, scaled, group=method, colour=method)) +
+  geom_line() + geom_point()  + theme(legend.position="bottom") + facet_wrap(~ cluster_id, ncol = 4) #+ geom_ribbon(alpha = 0.4) 
+
+
+```
+
+## Discussion
+
+The suite of results presented here confirm that geo-referenced fishery dependent data can assist with accounting for, and quantifying spatial structure in abalone fisheries data. That does not translate however, to major shifts in standardised mean annual catch rates. Mean catch per hour of effort was relatively robust to a range of modelling approaches with different spatial and temporal resolution of predictor terms. Surprisingly, aggregating response and predictor variables to the scale of fishing day did not have an adverse impact on the estimated annual mean catch rate. In terms of impact on catch rate trends, there appears limited direct benefit in applying spatial regression methods to catch rate standardisation given the negligible improvement found in this study. There are however other benefits of application of spatial linear models which are discussed below.
+
+Utilising high resolution data on fishing activity to build maps of discrete reef systems, and adding a reef identifier to the model as a random effect does appear to be advantageous. This appears to be a valuable use of the fine scale fisheries data, regardless of whether a spatial term is added to the mixed effects model. While it is desirable to capture information on fisher Docket returns about geographic structure within an SAU, the formal subblock (mapcode, reefcode) reporting areas often dissect contiguous rocky reef. Whereas empirical rule-based determination of reef systems based on centroids of dive polygons is a more defensible approach to addressing within SAU spatial structure. Typically, the number of discrete reef areas within an SAU is higher than the number of formal subblock divisions, and meets the normally accepted requirement for random effects to have more than five levels. A greater difference is evident among clusters in annual catch rate trends (@fig-sdm-trends-cl) than when a coarse grouping level such as subblock is used (@fig-sdm-trends-sb).
+
+The relatively new spatially explicit GLMM tools are providing capability to incorporate spatial terms and capture spatial structure in CPUE standardisation and/or research surveys [ @evans2021; @tanakak.r.2022a; @thompson2023; @thorson2023; @ward2022; @zhou2019]. Application of mixed effect models for CPUE standardisation require a relatively high level of expertise, and there are many different views on their efficacy and their implementation. Adding spatial terms to GLMMs necessarily adds complexity, with many more traps for young players [@hodges2010]. At this stage, mixed effects models with random spatial terms are being actively developed, with rapid advances made in terms of speed of computation. Implementation of these types of models as well as informative diagnostics and capacity to make comparisons with non-spatial models are still their infancy. It is very clear from the experimental implementation of spatially explicit mixed effect models in this chapter, that the capacity to explore temporal shifts in the spatial structure of residuals can provide great insight into underlying changes within SAUs, that would be impossible to capture without a GPS and depth data logger program.
+
+This chapter has skimmed the surface of the potential use of spatial GLMMS. As the new tools mature, particularity those using TMB [@TMB] and INLA [@INLAspacetime; @INLA ] for the basis of CPU intensive spatial computations, the scope for application will broaden.
